@@ -12,6 +12,7 @@ import CashClosuresHistory from "./cash-closures-history";
 import CompanyConfig from "./company-config";
 import WhatsAppConfig from "./whatsapp-config";
 import EmployeesManagement from "./employees-management";
+import DeliveryAnalyticsDashboard from "./delivery-analytics-dashboard";
 import { useQuery } from "@tanstack/react-query";
 import logoPath from "@assets/generated_images/BT_fused_single_letter_1577c2b8.png";
 
@@ -92,6 +93,8 @@ export default function Dashboard({ user, onLogout, onNotification }: DashboardP
         return <CompanyConfig onBack={() => setActiveTab('overview')} />;
       case "whatsapp-config":
         return <WhatsAppConfig onBack={() => setActiveTab('overview')} />;
+      case "delivery-analytics":
+        return <DeliveryAnalyticsDashboard onBack={() => setActiveTab('overview')} />;
       default:
         return (
           <div>
@@ -164,7 +167,7 @@ export default function Dashboard({ user, onLogout, onNotification }: DashboardP
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
               <div className="bg-white dark:bg-gray-800/50 rounded-xl shadow-sm border border-slate-200 dark:border-cyan-500/20 p-6 dark:backdrop-blur-sm">
                 <h3 className="text-lg font-bold text-slate-900 dark:text-white tech-text-glow mb-4">Acciones Rápidas</h3>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
                   <button 
                     onClick={() => setActiveTab('invoices')}
                     className="tech-button-3d bg-white border-2 border-sky-300 text-sky-700 dark:from-cyan-500/20 dark:to-blue-600/20 dark:text-white p-4 rounded-lg hover:bg-sky-50 hover:border-sky-400 dark:hover:from-cyan-400/30 dark:hover:to-blue-500/30 transition-all duration-300 text-left shadow-lg hover:shadow-xl transform hover:scale-105"
@@ -189,13 +192,21 @@ export default function Dashboard({ user, onLogout, onNotification }: DashboardP
                     <span className="text-lg mb-2 block">💰</span>
                     <p className="text-sm font-bold">Cierre de Caja</p>
                   </button>
-                  <button 
+                  <button
                     onClick={() => setActiveTab('services')}
                     className="tech-button-3d bg-white border-2 border-amber-300 text-amber-700 dark:from-yellow-500/20 dark:to-orange-600/20 dark:text-white p-4 rounded-lg hover:bg-amber-50 hover:border-amber-400 dark:hover:from-yellow-400/30 dark:hover:to-orange-500/30 transition-all duration-300 text-left shadow-lg hover:shadow-xl transform hover:scale-105"
                     data-testid="quick-action-configure"
                   >
                     <span className="text-lg mb-2 block">⚙️</span>
                     <p className="text-sm font-bold">Configurar</p>
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('delivery-analytics')}
+                    className="tech-button-3d bg-white border-2 border-indigo-300 text-indigo-700 dark:from-indigo-500/20 dark:to-purple-600/20 dark:text-white p-4 rounded-lg hover:bg-indigo-50 hover:border-indigo-400 dark:hover:from-indigo-400/30 dark:hover:to-purple-500/30 transition-all duration-300 text-left shadow-lg hover:shadow-xl transform hover:scale-105"
+                    data-testid="quick-action-delivery-analytics"
+                  >
+                    <span className="text-lg mb-2 block">📊</span>
+                    <p className="text-sm font-bold">Análisis Entregas</p>
                   </button>
                 </div>
               </div>

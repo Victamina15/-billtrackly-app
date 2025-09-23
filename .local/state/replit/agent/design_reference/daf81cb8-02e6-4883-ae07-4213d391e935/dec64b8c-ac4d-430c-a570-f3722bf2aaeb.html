@@ -1,0 +1,1075 @@
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Billtracky - Sistema de Gestión Lavandería</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+    tailwind.config = {
+        theme: {
+            extend: {
+                borderRadius: {
+                    lg: "var(--radius)",
+                    md: "calc(var(--radius) - 2px)",
+                    sm: "calc(var(--radius) - 4px)",
+                },
+                colors: {
+                    background: "var(--background)",
+                    foreground: "var(--foreground)",
+                    card: {
+                        DEFAULT: "var(--card)",
+                        foreground: "var(--card-foreground)",
+                    },
+                    primary: {
+                        DEFAULT: "var(--primary)",
+                        foreground: "var(--primary-foreground)",
+                    },
+                    secondary: {
+                        DEFAULT: "var(--secondary)",
+                        foreground: "var(--secondary-foreground)",
+                    },
+                    muted: {
+                        DEFAULT: "var(--muted)",
+                        foreground: "var(--muted-foreground)",
+                    },
+                    accent: {
+                        DEFAULT: "var(--accent)",
+                        foreground: "var(--accent-foreground)",
+                    },
+                    destructive: {
+                        DEFAULT: "var(--destructive)",
+                        foreground: "var(--destructive-foreground)",
+                    },
+                    border: "var(--border)",
+                    input: "var(--input)",
+                    ring: "var(--ring)",
+                },
+                fontFamily: {
+                    sans: ["Inter", "system-ui", "sans-serif"],
+                }
+            },
+        }
+    };
+    </script>
+    <style>
+        :root {
+            --background: hsl(210 40% 98%);
+            --foreground: hsl(222.2 84% 4.9%);
+            --card: hsl(0 0% 100%);
+            --card-foreground: hsl(222.2 84% 4.9%);
+            --primary: hsl(0 72% 51%);
+            --primary-foreground: hsl(210 40% 98%);
+            --secondary: hsl(221 83% 53%);
+            --secondary-foreground: hsl(210 40% 98%);
+            --muted: hsl(210 40% 96%);
+            --muted-foreground: hsl(215.4 16.3% 46.9%);
+            --accent: hsl(210 40% 96%);
+            --accent-foreground: hsl(222.2 84% 4.9%);
+            --destructive: hsl(0 84.2% 60.2%);
+            --destructive-foreground: hsl(210 40% 98%);
+            --border: hsl(214.3 31.8% 91.4%);
+            --input: hsl(214.3 31.8% 91.4%);
+            --ring: hsl(221 83% 53%);
+            --radius: 0.75rem;
+        }
+        
+        .gradient-bg {
+            background: linear-gradient(135deg, #DC2626 0%, #2563EB 100%);
+        }
+        
+        .card-hover {
+            transition: all 0.2s ease-in-out;
+        }
+        
+        .card-hover:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+        
+        .pulse-animation {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: .8;
+            }
+        }
+        
+        .fade-in {
+            animation: fadeIn 0.3s ease-in-out;
+        }
+        
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+    </style>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+</head>
+<body class="font-sans bg-background text-foreground">
+    <!-- @COMPONENT: App [Main application container] -->
+    <div id="app" class="min-h-screen">
+        
+        <!-- LOGIN SCREEN -->
+        <!-- @COMPONENT: LoginScreen [Authentication interface] -->
+        <div id="loginScreen" class="min-h-screen gradient-bg flex items-center justify-center p-4">
+            <div class="bg-card rounded-2xl shadow-2xl max-w-md w-full p-8 fade-in">
+                <div class="text-center mb-8">
+                    <div class="w-20 h-20 bg-primary rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg">
+                        <i data-lucide="file-text" class="w-10 h-10 text-primary-foreground"></i>
+                    </div>
+                    <h1 class="text-3xl font-bold text-card-foreground">Billtracky</h1>
+                    <p class="text-muted-foreground mt-2 font-medium">CleanWash Lavandería</p>
+                    <p class="text-sm text-muted-foreground">Sistema de Gestión Completo</p>
+                </div>
+
+                <div class="space-y-6">
+                    <div>
+                        <label class="block text-sm font-medium text-card-foreground mb-2">Código de Acceso</label>
+                        <div class="relative">
+                            <input
+                                type="password"
+                                id="accessCode"
+                                class="w-full px-4 py-3 border border-border rounded-lg focus:ring-2 focus:ring-ring focus:border-transparent pr-12 transition-all"
+                                placeholder="Ingresa tu código"
+                                maxlength="6"
+                                data-mock="true"
+                            />
+                            <button
+                                onclick="showKeypad()"
+                                class="absolute right-3 top-1/2 transform -translate-y-1/2 p-2 text-muted-foreground hover:text-secondary transition-colors"
+                                title="Teclado numérico"
+                            >
+                                <i data-lucide="grid-3x3" class="w-5 h-5"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="flex gap-3">
+                        <button
+                            onclick="showKeypad()"
+                            class="flex-1 bg-muted text-muted-foreground py-3 rounded-lg hover:bg-accent font-medium flex items-center justify-center space-x-2 transition-colors"
+                        >
+                            <i data-lucide="grid-3x3" class="w-4 h-4"></i>
+                            <span>Teclado</span>
+                        </button>
+                        <button
+                            onclick="showDashboard()"
+                            class="flex-1 bg-secondary text-secondary-foreground py-3 rounded-lg hover:bg-secondary/90 font-medium transition-colors"
+                        >
+                            Iniciar Sesión
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="mt-8 text-center text-xs text-muted-foreground bg-muted rounded-lg p-4">
+                    <p class="font-medium mb-1">Códigos de prueba:</p>
+                    <p>1234 (Gerente) | 5678 (Empleado) | 9999 (Supervisor)</p>
+                </div>
+            </div>
+        </div>
+        <!-- @END_COMPONENT: LoginScreen -->
+
+        <!-- NUMERIC KEYPAD MODAL -->
+        <!-- @COMPONENT: NumericKeypad [Virtual keypad for access code input] -->
+        <div id="keypadModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 hidden">
+            <div class="bg-card rounded-2xl max-w-sm w-full p-6 shadow-2xl fade-in">
+                <div class="text-center mb-6">
+                    <h3 class="text-xl font-bold text-card-foreground">Teclado Numérico</h3>
+                    <div class="mt-4 p-4 bg-muted rounded-lg">
+                        <span id="codeDisplay" class="text-2xl font-mono tracking-widest text-card-foreground" data-mock="true">
+                            ______
+                        </span>
+                    </div>
+                </div>
+                
+                <div class="grid grid-cols-3 gap-3 mb-6">
+                    <!-- @MAP: [1,2,3,4,5,6,7,8,9].map(num => ( -->
+                    <button class="h-14 bg-muted hover:bg-accent rounded-lg text-xl font-semibold transition-colors keypad-btn" data-number="1">1</button>
+                    <button class="h-14 bg-muted hover:bg-accent rounded-lg text-xl font-semibold transition-colors keypad-btn" data-number="2">2</button>
+                    <button class="h-14 bg-muted hover:bg-accent rounded-lg text-xl font-semibold transition-colors keypad-btn" data-number="3">3</button>
+                    <button class="h-14 bg-muted hover:bg-accent rounded-lg text-xl font-semibold transition-colors keypad-btn" data-number="4">4</button>
+                    <button class="h-14 bg-muted hover:bg-accent rounded-lg text-xl font-semibold transition-colors keypad-btn" data-number="5">5</button>
+                    <button class="h-14 bg-muted hover:bg-accent rounded-lg text-xl font-semibold transition-colors keypad-btn" data-number="6">6</button>
+                    <button class="h-14 bg-muted hover:bg-accent rounded-lg text-xl font-semibold transition-colors keypad-btn" data-number="7">7</button>
+                    <button class="h-14 bg-muted hover:bg-accent rounded-lg text-xl font-semibold transition-colors keypad-btn" data-number="8">8</button>
+                    <button class="h-14 bg-muted hover:bg-accent rounded-lg text-xl font-semibold transition-colors keypad-btn" data-number="9">9</button>
+                    <!-- @END_MAP )) -->
+                    <button class="h-14 bg-muted hover:bg-accent rounded-lg text-xl font-semibold transition-colors keypad-btn" data-number="0">0</button>
+                    <button onclick="deleteNumber()" class="h-14 bg-destructive/10 hover:bg-destructive/20 text-destructive rounded-lg font-semibold transition-colors">
+                        <i data-lucide="delete" class="w-5 h-5 mx-auto"></i>
+                    </button>
+                    <button onclick="clearCode()" class="h-14 bg-yellow-100 hover:bg-yellow-200 text-yellow-700 rounded-lg font-semibold transition-colors text-sm">
+                        Limpiar
+                    </button>
+                </div>
+                
+                <div class="grid grid-cols-2 gap-3">
+                    <button
+                        onclick="hideKeypad()"
+                        class="py-3 bg-muted text-muted-foreground rounded-lg hover:bg-accent font-medium transition-colors"
+                    >
+                        Cancelar
+                    </button>
+                    <button
+                        onclick="submitCode()"
+                        class="py-3 bg-secondary text-secondary-foreground rounded-lg hover:bg-secondary/90 font-medium transition-colors"
+                    >
+                        Ingresar
+                    </button>
+                </div>
+            </div>
+        </div>
+        <!-- @END_COMPONENT: NumericKeypad -->
+
+        <!-- MAIN DASHBOARD -->
+        <!-- @COMPONENT: Dashboard [Main application interface after login] -->
+        <div id="dashboard" class="min-h-screen bg-background hidden">
+            <!-- Header -->
+            <header class="bg-card shadow-sm border-b border-border px-6 py-4">
+                <div class="flex justify-between items-center">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-10 h-10 bg-primary rounded-lg flex items-center justify-center shadow-md">
+                            <i data-lucide="file-text" class="w-6 h-6 text-primary-foreground"></i>
+                        </div>
+                        <div>
+                            <h1 class="text-xl font-bold text-card-foreground">Billtracky</h1>
+                            <p class="text-sm text-muted-foreground">CleanWash Lavandería</p>
+                        </div>
+                    </div>
+                    
+                    <div class="flex items-center space-x-4">
+                        <div class="text-right">
+                            <div class="flex items-center space-x-2 mb-1">
+                                <div class="w-2 h-2 bg-green-500 rounded-full pulse-animation"></div>
+                                <span class="text-sm text-green-600 font-medium">En línea</span>
+                            </div>
+                            <p class="text-sm font-medium text-card-foreground" data-bind="user.name">Juan Carlos</p>
+                            <span class="inline-block px-2 py-1 text-xs font-medium rounded-full mt-1 bg-secondary/10 text-secondary">
+                                Gerente
+                            </span>
+                        </div>
+                        
+                        <button
+                            onclick="logout()"
+                            class="p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors"
+                            title="Cerrar sesión"
+                        >
+                            <i data-lucide="log-out" class="w-5 h-5"></i>
+                        </button>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Navigation Tabs -->
+            <nav class="bg-card border-b border-border px-6">
+                <div class="flex space-x-1 overflow-x-auto">
+                    <button onclick="showTab('overview')" class="tab-btn tab-active px-4 py-3 text-sm font-medium whitespace-nowrap">
+                        <i data-lucide="home" class="w-4 h-4 mr-2"></i>
+                        Dashboard
+                    </button>
+                    <button onclick="showTab('orders')" class="tab-btn px-4 py-3 text-sm font-medium whitespace-nowrap">
+                        <i data-lucide="package" class="w-4 h-4 mr-2"></i>
+                        Órdenes
+                    </button>
+                    <button onclick="showTab('invoices')" class="tab-btn px-4 py-3 text-sm font-medium whitespace-nowrap">
+                        <i data-lucide="file-text" class="w-4 h-4 mr-2"></i>
+                        Nueva Factura
+                    </button>
+                    <button onclick="showTab('customers')" class="tab-btn px-4 py-3 text-sm font-medium whitespace-nowrap">
+                        <i data-lucide="users" class="w-4 h-4 mr-2"></i>
+                        Clientes
+                    </button>
+                    <button onclick="showTab('services')" class="tab-btn px-4 py-3 text-sm font-medium whitespace-nowrap">
+                        <i data-lucide="settings" class="w-4 h-4 mr-2"></i>
+                        Servicios
+                    </button>
+                </div>
+            </nav>
+
+            <!-- Main Content -->
+            <main class="p-6">
+                
+                <!-- OVERVIEW TAB -->
+                <!-- @COMPONENT: OverviewTab [Dashboard overview with metrics and quick actions] -->
+                <div id="overviewTab" class="tab-content">
+                    <!-- Metrics Cards -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                        <div class="bg-card rounded-xl shadow-sm border border-border p-6 card-hover">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <p class="text-sm font-medium text-muted-foreground">Órdenes Hoy</p>
+                                    <p class="text-2xl font-bold text-card-foreground" data-bind="metrics.todayOrders">12</p>
+                                    <p class="text-xs text-green-600 mt-1">+3 desde ayer</p>
+                                </div>
+                                <div class="w-12 h-12 bg-secondary/10 rounded-lg flex items-center justify-center">
+                                    <i data-lucide="package" class="w-6 h-6 text-secondary"></i>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="bg-card rounded-xl shadow-sm border border-border p-6 card-hover">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <p class="text-sm font-medium text-muted-foreground">Ingresos Hoy</p>
+                                    <p class="text-2xl font-bold text-card-foreground" data-bind="metrics.todayRevenue">RD$2,840</p>
+                                    <p class="text-xs text-green-600 mt-1">+15% vs ayer</p>
+                                </div>
+                                <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+                                    <i data-lucide="dollar-sign" class="w-6 h-6 text-green-600"></i>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="bg-card rounded-xl shadow-sm border border-border p-6 card-hover">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <p class="text-sm font-medium text-muted-foreground">En Proceso</p>
+                                    <p class="text-2xl font-bold text-card-foreground" data-bind="metrics.inProgress">8</p>
+                                    <p class="text-xs text-yellow-600 mt-1">2 listos pronto</p>
+                                </div>
+                                <div class="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
+                                    <i data-lucide="clock" class="w-6 h-6 text-yellow-600"></i>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="bg-card rounded-xl shadow-sm border border-border p-6 card-hover">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <p class="text-sm font-medium text-muted-foreground">Pendientes Pago</p>
+                                    <p class="text-2xl font-bold text-card-foreground" data-bind="metrics.pendingPayment">3</p>
+                                    <p class="text-xs text-red-600 mt-1">RD$1,065 total</p>
+                                </div>
+                                <div class="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
+                                    <i data-lucide="alert-circle" class="w-6 h-6 text-red-600"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Quick Actions -->
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+                        <div class="bg-card rounded-xl shadow-sm border border-border p-6">
+                            <h3 class="text-lg font-semibold text-card-foreground mb-4">Acciones Rápidas</h3>
+                            <div class="grid grid-cols-2 gap-4">
+                                <button onclick="showTab('invoices')" class="bg-primary text-primary-foreground p-4 rounded-lg hover:bg-primary/90 transition-colors text-left">
+                                    <i data-lucide="plus" class="w-5 h-5 mb-2"></i>
+                                    <p class="text-sm font-medium">Nueva Factura</p>
+                                </button>
+                                <button onclick="showTab('orders')" class="bg-secondary text-secondary-foreground p-4 rounded-lg hover:bg-secondary/90 transition-colors text-left">
+                                    <i data-lucide="search" class="w-5 h-5 mb-2"></i>
+                                    <p class="text-sm font-medium">Buscar Orden</p>
+                                </button>
+                                <button onclick="printReports()" class="bg-green-600 text-white p-4 rounded-lg hover:bg-green-700 transition-colors text-left">
+                                    <i data-lucide="printer" class="w-5 h-5 mb-2"></i>
+                                    <p class="text-sm font-medium">Reportes</p>
+                                </button>
+                                <button onclick="showTab('services')" class="bg-yellow-600 text-white p-4 rounded-lg hover:bg-yellow-700 transition-colors text-left">
+                                    <i data-lucide="settings" class="w-5 h-5 mb-2"></i>
+                                    <p class="text-sm font-medium">Configurar</p>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Recent Orders -->
+                        <div class="bg-card rounded-xl shadow-sm border border-border p-6">
+                            <h3 class="text-lg font-semibold text-card-foreground mb-4">Órdenes Recientes</h3>
+                            <div class="space-y-3">
+                                <!-- @MAP: recentOrders.map(order => ( -->
+                                <div class="flex items-center justify-between p-3 bg-muted rounded-lg">
+                                    <div>
+                                        <p class="font-medium text-card-foreground" data-bind="order.number">FAC-009</p>
+                                        <p class="text-sm text-muted-foreground" data-bind="order.customer">Juan Pérez</p>
+                                    </div>
+                                    <div class="text-right">
+                                        <span class="inline-block px-2 py-1 text-xs font-medium rounded-full bg-yellow-100 text-yellow-800">
+                                            En Proceso
+                                        </span>
+                                        <p class="text-sm font-medium text-card-foreground mt-1" data-bind="order.total">RD$378.00</p>
+                                    </div>
+                                </div>
+                                
+                                <div class="flex items-center justify-between p-3 bg-muted rounded-lg">
+                                    <div>
+                                        <p class="font-medium text-card-foreground" data-bind="order.number">FAC-008</p>
+                                        <p class="text-sm text-muted-foreground" data-bind="order.customer">María García</p>
+                                    </div>
+                                    <div class="text-right">
+                                        <span class="inline-block px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800">
+                                            Listo
+                                        </span>
+                                        <p class="text-sm font-medium text-card-foreground mt-1" data-bind="order.total">RD$290.00</p>
+                                    </div>
+                                </div>
+                                <!-- @END_MAP )) -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- @END_COMPONENT: OverviewTab -->
+
+                <!-- ORDERS TAB -->
+                <!-- @COMPONENT: OrdersTab [Order management and tracking] -->
+                <div id="ordersTab" class="tab-content hidden">
+                    <div class="bg-card rounded-xl shadow-sm border border-border p-6">
+                        <div class="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
+                            <h2 class="text-xl font-semibold text-card-foreground mb-4 md:mb-0">Gestión de Órdenes</h2>
+                            <div class="flex flex-col sm:flex-row gap-3">
+                                <div class="relative">
+                                    <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground"></i>
+                                    <input
+                                        type="text"
+                                        placeholder="Buscar por cliente o número..."
+                                        class="pl-10 pr-4 py-2 border border-border rounded-lg focus:ring-2 focus:ring-ring focus:border-transparent w-full sm:w-64"
+                                        data-mock="true"
+                                    />
+                                </div>
+                                <select class="px-4 py-2 border border-border rounded-lg focus:ring-2 focus:ring-ring focus:border-transparent">
+                                    <option>Todos los estados</option>
+                                    <option>Recibido</option>
+                                    <option>En Proceso</option>
+                                    <option>Listo</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Orders Table -->
+                        <div class="overflow-x-auto">
+                            <table class="w-full">
+                                <thead>
+                                    <tr class="border-b border-border">
+                                        <th class="text-left py-3 px-4 font-medium text-muted-foreground">Número</th>
+                                        <th class="text-left py-3 px-4 font-medium text-muted-foreground">Cliente</th>
+                                        <th class="text-left py-3 px-4 font-medium text-muted-foreground">Teléfono</th>
+                                        <th class="text-left py-3 px-4 font-medium text-muted-foreground">Total</th>
+                                        <th class="text-left py-3 px-4 font-medium text-muted-foreground">Estado</th>
+                                        <th class="text-left py-3 px-4 font-medium text-muted-foreground">Fecha</th>
+                                        <th class="text-left py-3 px-4 font-medium text-muted-foreground">Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-border">
+                                    <!-- @MAP: orders.map(order => ( -->
+                                    <tr class="hover:bg-muted/50 transition-colors">
+                                        <td class="py-4 px-4">
+                                            <span class="font-medium text-card-foreground" data-bind="order.number">FAC-009</span>
+                                        </td>
+                                        <td class="py-4 px-4">
+                                            <span class="text-card-foreground" data-bind="order.customer">Juan Pérez</span>
+                                        </td>
+                                        <td class="py-4 px-4">
+                                            <span class="text-muted-foreground" data-bind="order.phone">809-150-2025</span>
+                                        </td>
+                                        <td class="py-4 px-4">
+                                            <span class="font-medium text-card-foreground" data-bind="order.total">RD$378.00</span>
+                                        </td>
+                                        <td class="py-4 px-4">
+                                            <span class="inline-block px-2 py-1 text-xs font-medium rounded-full bg-yellow-100 text-yellow-800">
+                                                En Proceso
+                                            </span>
+                                        </td>
+                                        <td class="py-4 px-4">
+                                            <span class="text-muted-foreground" data-bind="order.date">04/09/2025</span>
+                                        </td>
+                                        <td class="py-4 px-4">
+                                            <div class="flex items-center space-x-2">
+                                                <button onclick="viewOrder()" class="p-1 text-secondary hover:bg-secondary/10 rounded">
+                                                    <i data-lucide="eye" class="w-4 h-4"></i>
+                                                </button>
+                                                <button onclick="editOrder()" class="p-1 text-muted-foreground hover:bg-muted rounded">
+                                                    <i data-lucide="edit-3" class="w-4 h-4"></i>
+                                                </button>
+                                                <button onclick="printOrder()" class="p-1 text-green-600 hover:bg-green-100 rounded">
+                                                    <i data-lucide="printer" class="w-4 h-4"></i>
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    
+                                    <tr class="hover:bg-muted/50 transition-colors">
+                                        <td class="py-4 px-4">
+                                            <span class="font-medium text-card-foreground" data-bind="order.number">FAC-008</span>
+                                        </td>
+                                        <td class="py-4 px-4">
+                                            <span class="text-card-foreground" data-bind="order.customer">María García</span>
+                                        </td>
+                                        <td class="py-4 px-4">
+                                            <span class="text-muted-foreground" data-bind="order.phone">809-555-1234</span>
+                                        </td>
+                                        <td class="py-4 px-4">
+                                            <span class="font-medium text-card-foreground" data-bind="order.total">RD$290.00</span>
+                                        </td>
+                                        <td class="py-4 px-4">
+                                            <span class="inline-block px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800">
+                                                Listo
+                                            </span>
+                                        </td>
+                                        <td class="py-4 px-4">
+                                            <span class="text-muted-foreground" data-bind="order.date">03/09/2025</span>
+                                        </td>
+                                        <td class="py-4 px-4">
+                                            <div class="flex items-center space-x-2">
+                                                <button onclick="viewOrder()" class="p-1 text-secondary hover:bg-secondary/10 rounded">
+                                                    <i data-lucide="eye" class="w-4 h-4"></i>
+                                                </button>
+                                                <button onclick="editOrder()" class="p-1 text-muted-foreground hover:bg-muted rounded">
+                                                    <i data-lucide="edit-3" class="w-4 h-4"></i>
+                                                </button>
+                                                <button onclick="printOrder()" class="p-1 text-green-600 hover:bg-green-100 rounded">
+                                                    <i data-lucide="printer" class="w-4 h-4"></i>
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    <!-- @END_MAP )) -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <!-- @END_COMPONENT: OrdersTab -->
+
+                <!-- NEW INVOICE TAB -->
+                <!-- @COMPONENT: InvoiceTab [New invoice creation form] -->
+                <div id="invoicesTab" class="tab-content hidden">
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <!-- Invoice Form -->
+                        <div class="lg:col-span-2">
+                            <div class="bg-card rounded-xl shadow-sm border border-border p-6">
+                                <h2 class="text-xl font-semibold text-card-foreground mb-6">Nueva Factura</h2>
+                                
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                                    <div>
+                                        <label class="block text-sm font-medium text-card-foreground mb-2">Número de Factura</label>
+                                        <input
+                                            type="text"
+                                            value="FAC-010"
+                                            readonly
+                                            class="w-full px-4 py-2 border border-border rounded-lg bg-muted text-muted-foreground"
+                                            data-bind="invoice.number"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-card-foreground mb-2">Fecha</label>
+                                        <input
+                                            type="date"
+                                            class="w-full px-4 py-2 border border-border rounded-lg focus:ring-2 focus:ring-ring focus:border-transparent"
+                                            data-bind="invoice.date"
+                                            data-mock="true"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                                    <div>
+                                        <label class="block text-sm font-medium text-card-foreground mb-2">Cliente</label>
+                                        <input
+                                            type="text"
+                                            placeholder="Nombre del cliente"
+                                            class="w-full px-4 py-2 border border-border rounded-lg focus:ring-2 focus:ring-ring focus:border-transparent"
+                                            data-bind="invoice.customer"
+                                            data-mock="true"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-card-foreground mb-2">Teléfono</label>
+                                        <input
+                                            type="tel"
+                                            placeholder="809-000-0000"
+                                            class="w-full px-4 py-2 border border-border rounded-lg focus:ring-2 focus:ring-ring focus:border-transparent"
+                                            data-bind="invoice.phone"
+                                            data-mock="true"
+                                        />
+                                    </div>
+                                </div>
+
+                                <!-- Service Selection -->
+                                <div class="mb-6">
+                                    <h3 class="text-lg font-medium text-card-foreground mb-4">Agregar Servicios</h3>
+                                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                                        <select class="px-4 py-2 border border-border rounded-lg focus:ring-2 focus:ring-ring focus:border-transparent">
+                                            <option>PANTALONES</option>
+                                            <option>CAMISAS</option>
+                                            <option>VESTIDOS</option>
+                                        </select>
+                                        <select class="px-4 py-2 border border-border rounded-lg focus:ring-2 focus:ring-ring focus:border-transparent">
+                                            <option>Lavado - RD$80</option>
+                                            <option>Planchado - RD$60</option>
+                                            <option>Lavado + Planchado - RD$110</option>
+                                        </select>
+                                        <div class="flex">
+                                            <input
+                                                type="number"
+                                                placeholder="Cantidad"
+                                                min="1"
+                                                class="flex-1 px-4 py-2 border border-border rounded-l-lg focus:ring-2 focus:ring-ring focus:border-transparent"
+                                                data-mock="true"
+                                            />
+                                            <button onclick="addService()" class="px-4 py-2 bg-primary text-primary-foreground rounded-r-lg hover:bg-primary/90 transition-colors">
+                                                <i data-lucide="plus" class="w-4 h-4"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Items List -->
+                                <div class="mb-6">
+                                    <h3 class="text-lg font-medium text-card-foreground mb-4">Artículos</h3>
+                                    <div class="space-y-3">
+                                        <!-- @MAP: invoice.items.map(item => ( -->
+                                        <div class="flex items-center justify-between p-4 bg-muted rounded-lg">
+                                            <div class="flex-1">
+                                                <p class="font-medium text-card-foreground" data-bind="item.name">PANTALONES - Lavado</p>
+                                                <p class="text-sm text-muted-foreground">Cantidad: <span data-bind="item.quantity">2</span></p>
+                                            </div>
+                                            <div class="text-right mr-4">
+                                                <p class="font-medium text-card-foreground" data-bind="item.total">RD$160.00</p>
+                                                <p class="text-sm text-muted-foreground">RD$80.00 c/u</p>
+                                            </div>
+                                            <button onclick="removeItem()" class="p-2 text-destructive hover:bg-destructive/10 rounded-lg transition-colors">
+                                                <i data-lucide="trash-2" class="w-4 h-4"></i>
+                                            </button>
+                                        </div>
+                                        <!-- @END_MAP )) -->
+                                    </div>
+                                </div>
+
+                                <!-- Actions -->
+                                <div class="flex flex-col sm:flex-row gap-3">
+                                    <button onclick="saveInvoice()" class="flex-1 bg-primary text-primary-foreground py-3 rounded-lg hover:bg-primary/90 font-medium transition-colors flex items-center justify-center">
+                                        <i data-lucide="save" class="w-4 h-4 mr-2"></i>
+                                        Guardar Factura
+                                    </button>
+                                    <button onclick="printInvoice()" class="flex-1 bg-secondary text-secondary-foreground py-3 rounded-lg hover:bg-secondary/90 font-medium transition-colors flex items-center justify-center">
+                                        <i data-lucide="printer" class="w-4 h-4 mr-2"></i>
+                                        Imprimir
+                                    </button>
+                                    <button onclick="clearInvoice()" class="flex-1 bg-muted text-muted-foreground py-3 rounded-lg hover:bg-accent font-medium transition-colors">
+                                        Limpiar
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Invoice Preview -->
+                        <div class="lg:col-span-1">
+                            <div class="bg-card rounded-xl shadow-sm border border-border p-6 sticky top-6">
+                                <h3 class="text-lg font-semibold text-card-foreground mb-4">Resumen</h3>
+                                
+                                <div class="space-y-3 mb-6">
+                                    <div class="flex justify-between">
+                                        <span class="text-muted-foreground">Subtotal:</span>
+                                        <span class="font-medium" data-bind="invoice.subtotal">RD$160.00</span>
+                                    </div>
+                                    <div class="flex justify-between">
+                                        <span class="text-muted-foreground">ITBIS (18%):</span>
+                                        <span class="font-medium" data-bind="invoice.tax">RD$28.80</span>
+                                    </div>
+                                    <div class="border-t border-border pt-3">
+                                        <div class="flex justify-between">
+                                            <span class="text-lg font-semibold text-card-foreground">Total:</span>
+                                            <span class="text-lg font-bold text-primary" data-bind="invoice.total">RD$188.80</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="space-y-3">
+                                    <h4 class="font-medium text-card-foreground">Método de Pago</h4>
+                                    <div class="space-y-2">
+                                        <label class="flex items-center space-x-2">
+                                            <input type="radio" name="paymentMethod" value="cash" class="text-primary focus:ring-primary" />
+                                            <span class="text-sm">Efectivo</span>
+                                        </label>
+                                        <label class="flex items-center space-x-2">
+                                            <input type="radio" name="paymentMethod" value="card" class="text-primary focus:ring-primary" />
+                                            <span class="text-sm">Tarjeta</span>
+                                        </label>
+                                        <label class="flex items-center space-x-2">
+                                            <input type="radio" name="paymentMethod" value="pending" class="text-primary focus:ring-primary" checked />
+                                            <span class="text-sm">Pendiente</span>
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- @END_COMPONENT: InvoiceTab -->
+
+                <!-- CUSTOMERS TAB -->
+                <!-- @COMPONENT: CustomersTab [Customer management interface] -->
+                <div id="customersTab" class="tab-content hidden">
+                    <div class="bg-card rounded-xl shadow-sm border border-border p-6">
+                        <div class="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
+                            <h2 class="text-xl font-semibold text-card-foreground mb-4 md:mb-0">Gestión de Clientes</h2>
+                            <button onclick="addCustomer()" class="bg-primary text-primary-foreground px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors flex items-center">
+                                <i data-lucide="plus" class="w-4 h-4 mr-2"></i>
+                                Nuevo Cliente
+                            </button>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            <!-- @MAP: customers.map(customer => ( -->
+                            <div class="bg-muted rounded-lg p-4 card-hover">
+                                <div class="flex items-center justify-between mb-3">
+                                    <div class="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
+                                        <i data-lucide="user" class="w-6 h-6 text-primary"></i>
+                                    </div>
+                                    <button onclick="editCustomer()" class="p-1 text-muted-foreground hover:text-card-foreground">
+                                        <i data-lucide="edit-3" class="w-4 h-4"></i>
+                                    </button>
+                                </div>
+                                <h3 class="font-medium text-card-foreground mb-1" data-bind="customer.name">Juan Pérez</h3>
+                                <p class="text-sm text-muted-foreground mb-2" data-bind="customer.phone">809-150-2025</p>
+                                <div class="flex items-center justify-between text-sm">
+                                    <span class="text-muted-foreground">Órdenes: <span data-bind="customer.ordersCount">8</span></span>
+                                    <span class="text-green-600 font-medium" data-bind="customer.totalSpent">RD$1,240</span>
+                                </div>
+                            </div>
+                            
+                            <div class="bg-muted rounded-lg p-4 card-hover">
+                                <div class="flex items-center justify-between mb-3">
+                                    <div class="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
+                                        <i data-lucide="user" class="w-6 h-6 text-primary"></i>
+                                    </div>
+                                    <button onclick="editCustomer()" class="p-1 text-muted-foreground hover:text-card-foreground">
+                                        <i data-lucide="edit-3" class="w-4 h-4"></i>
+                                    </button>
+                                </div>
+                                <h3 class="font-medium text-card-foreground mb-1" data-bind="customer.name">María García</h3>
+                                <p class="text-sm text-muted-foreground mb-2" data-bind="customer.phone">809-555-1234</p>
+                                <div class="flex items-center justify-between text-sm">
+                                    <span class="text-muted-foreground">Órdenes: <span data-bind="customer.ordersCount">5</span></span>
+                                    <span class="text-green-600 font-medium" data-bind="customer.totalSpent">RD$890</span>
+                                </div>
+                            </div>
+                            <!-- @END_MAP )) -->
+                        </div>
+                    </div>
+                </div>
+                <!-- @END_COMPONENT: CustomersTab -->
+
+                <!-- SERVICES TAB -->
+                <!-- @COMPONENT: ServicesTab [Service configuration and pricing] -->
+                <div id="servicesTab" class="tab-content hidden">
+                    <div class="bg-card rounded-xl shadow-sm border border-border p-6">
+                        <h2 class="text-xl font-semibold text-card-foreground mb-6">Configuración de Servicios</h2>
+                        
+                        <div class="space-y-6">
+                            <!-- @MAP: services.map(service => ( -->
+                            <div class="border border-border rounded-lg p-6">
+                                <div class="flex items-center justify-between mb-4">
+                                    <h3 class="text-lg font-medium text-card-foreground" data-bind="service.name">PANTALONES</h3>
+                                    <button onclick="editService()" class="p-2 text-muted-foreground hover:text-card-foreground hover:bg-muted rounded-lg">
+                                        <i data-lucide="edit-3" class="w-4 h-4"></i>
+                                    </button>
+                                </div>
+                                
+                                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    <div class="bg-muted p-4 rounded-lg">
+                                        <p class="text-sm text-muted-foreground mb-1">Solo Lavado</p>
+                                        <p class="text-xl font-bold text-card-foreground" data-bind="service.washPrice">RD$80.00</p>
+                                    </div>
+                                    <div class="bg-muted p-4 rounded-lg">
+                                        <p class="text-sm text-muted-foreground mb-1">Solo Planchado</p>
+                                        <p class="text-xl font-bold text-card-foreground" data-bind="service.ironPrice">RD$60.00</p>
+                                    </div>
+                                    <div class="bg-muted p-4 rounded-lg">
+                                        <p class="text-sm text-muted-foreground mb-1">Lavado + Planchado</p>
+                                        <p class="text-xl font-bold text-card-foreground" data-bind="service.bothPrice">RD$110.00</p>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="border border-border rounded-lg p-6">
+                                <div class="flex items-center justify-between mb-4">
+                                    <h3 class="text-lg font-medium text-card-foreground" data-bind="service.name">CAMISAS</h3>
+                                    <button onclick="editService()" class="p-2 text-muted-foreground hover:text-card-foreground hover:bg-muted rounded-lg">
+                                        <i data-lucide="edit-3" class="w-4 h-4"></i>
+                                    </button>
+                                </div>
+                                
+                                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    <div class="bg-muted p-4 rounded-lg">
+                                        <p class="text-sm text-muted-foreground mb-1">Solo Lavado</p>
+                                        <p class="text-xl font-bold text-card-foreground" data-bind="service.washPrice">RD$60.00</p>
+                                    </div>
+                                    <div class="bg-muted p-4 rounded-lg">
+                                        <p class="text-sm text-muted-foreground mb-1">Solo Planchado</p>
+                                        <p class="text-xl font-bold text-card-foreground" data-bind="service.ironPrice">RD$40.00</p>
+                                    </div>
+                                    <div class="bg-muted p-4 rounded-lg">
+                                        <p class="text-sm text-muted-foreground mb-1">Lavado + Planchado</p>
+                                        <p class="text-xl font-bold text-card-foreground" data-bind="service.bothPrice">RD$85.00</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- @END_MAP )) -->
+                        </div>
+                        
+                        <div class="mt-6 flex justify-end">
+                            <button onclick="addService()" class="bg-primary text-primary-foreground px-6 py-3 rounded-lg hover:bg-primary/90 transition-colors flex items-center">
+                                <i data-lucide="plus" class="w-4 h-4 mr-2"></i>
+                                Agregar Servicio
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <!-- @END_COMPONENT: ServicesTab -->
+
+            </main>
+        </div>
+        <!-- @END_COMPONENT: Dashboard -->
+
+        <!-- NOTIFICATION MODAL -->
+        <!-- @COMPONENT: NotificationModal [Success/error notifications] -->
+        <div id="notificationModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 hidden">
+            <div class="bg-card rounded-2xl max-w-md w-full p-6 shadow-2xl fade-in">
+                <div class="text-center">
+                    <div class="w-16 h-16 bg-secondary/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <i data-lucide="check" class="w-8 h-8 text-secondary"></i>
+                    </div>
+                    <h3 class="text-lg font-semibold text-card-foreground mb-2">Billtracky</h3>
+                    <p id="notificationMessage" class="text-muted-foreground mb-6" data-mock="true">Operación completada exitosamente</p>
+                    <button
+                        onclick="closeNotification()"
+                        class="w-full bg-secondary text-secondary-foreground py-3 rounded-lg hover:bg-secondary/90 font-medium transition-colors"
+                    >
+                        Aceptar
+                    </button>
+                </div>
+            </div>
+        </div>
+        <!-- @END_COMPONENT: NotificationModal -->
+
+    </div>
+    <!-- @END_COMPONENT: App -->
+
+    <script>
+        // Initialize Lucide icons
+        lucide.createIcons();
+
+        // Application state
+        let currentUser = null;
+        let currentTab = 'overview';
+        let enteredCode = '';
+
+        // TODO: Implement real authentication system with backend API
+        // TODO: Implement real database connections for all CRUD operations
+        // TODO: Add form validation and error handling
+        // TODO: Implement print functionality for invoices and reports
+        // TODO: Add real-time updates for order status changes
+        // TODO: Implement data export/import functionality
+        // TODO: Add comprehensive reporting and analytics
+
+        // UI Functions
+        function showKeypad() {
+            document.getElementById('keypadModal').classList.remove('hidden');
+            updateCodeDisplay();
+        }
+
+        function hideKeypad() {
+            document.getElementById('keypadModal').classList.add('hidden');
+        }
+
+        function updateCodeDisplay() {
+            const display = document.getElementById('codeDisplay');
+            display.textContent = enteredCode.replace(/./g, '•').padEnd(6, '_');
+        }
+
+        // Add event listeners for keypad buttons
+        (function() {
+            document.querySelectorAll('.keypad-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const number = this.getAttribute('data-number');
+                    if (enteredCode.length < 6) {
+                        enteredCode += number;
+                        updateCodeDisplay();
+                    }
+                });
+            });
+        })();
+
+        function deleteNumber() {
+            enteredCode = enteredCode.slice(0, -1);
+            updateCodeDisplay();
+        }
+
+        function clearCode() {
+            enteredCode = '';
+            updateCodeDisplay();
+        }
+
+        function submitCode() {
+            hideKeypad();
+            // Simulate authentication - in real app, validate against backend
+            if (enteredCode === '1234' || enteredCode === '5678' || enteredCode === '9999') {
+                showDashboard();
+                showNotification('¡Bienvenido! Inicio de sesión exitoso.');
+            } else {
+                showNotification('Código de acceso incorrecto. Intente nuevamente.');
+            }
+            enteredCode = '';
+        }
+
+        function showDashboard() {
+            document.getElementById('loginScreen').classList.add('hidden');
+            document.getElementById('dashboard').classList.remove('hidden');
+            currentUser = { name: 'Juan Carlos', role: 'Gerente' }; // Mock user
+        }
+
+        function logout() {
+            document.getElementById('dashboard').classList.add('hidden');
+            document.getElementById('loginScreen').classList.remove('hidden');
+            currentUser = null;
+            currentTab = 'overview';
+            showNotification('Sesión cerrada correctamente.');
+        }
+
+        function showTab(tabName) {
+            // Hide all tabs
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.add('hidden');
+            });
+            
+            // Remove active class from all tab buttons
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('tab-active');
+            });
+            
+            // Show selected tab
+            const tabContent = document.getElementById(tabName + 'Tab');
+            if (tabContent) {
+                tabContent.classList.remove('hidden');
+            }
+            
+            // Add active class to clicked button
+            event.target.closest('.tab-btn').classList.add('tab-active');
+            
+            currentTab = tabName;
+        }
+
+        function showNotification(message) {
+            document.getElementById('notificationMessage').textContent = message;
+            document.getElementById('notificationModal').classList.remove('hidden');
+        }
+
+        function closeNotification() {
+            document.getElementById('notificationModal').classList.add('hidden');
+        }
+
+        // Business Logic Functions (Mock implementations)
+        function addService() {
+            showNotification('Servicio agregado a la factura');
+        }
+
+        function removeItem() {
+            showNotification('Artículo eliminado de la factura');
+        }
+
+        function saveInvoice() {
+            showNotification('Factura guardada exitosamente');
+        }
+
+        function printInvoice() {
+            showNotification('Preparando impresión...');
+        }
+
+        function clearInvoice() {
+            showNotification('Factura limpiada');
+        }
+
+        function viewOrder() {
+            showNotification('Abriendo detalles de la orden...');
+        }
+
+        function editOrder() {
+            showNotification('Editando orden...');
+        }
+
+        function printOrder() {
+            showNotification('Imprimiendo orden...');
+        }
+
+        function addCustomer() {
+            showNotification('Abriendo formulario de nuevo cliente...');
+        }
+
+        function editCustomer() {
+            showNotification('Editando información del cliente...');
+        }
+
+        function editService() {
+            showNotification('Editando configuración del servicio...');
+        }
+
+        function printReports() {
+            showNotification('Generando reportes...');
+        }
+
+        // Initialize CSS for tab styling
+        (function() {
+            const style = document.createElement('style');
+            style.textContent = `
+                .tab-btn {
+                    display: flex;
+                    align-items: center;
+                    color: hsl(var(--muted-foreground));
+                    border-bottom: 2px solid transparent;
+                    transition: all 0.2s ease;
+                }
+                
+                .tab-btn:hover {
+                    color: hsl(var(--card-foreground));
+                    background-color: hsl(var(--muted));
+                    border-radius: 0.5rem 0.5rem 0 0;
+                }
+                
+                .tab-active {
+                    color: hsl(var(--secondary)) !important;
+                    border-bottom-color: hsl(var(--secondary));
+                    background-color: transparent;
+                }
+            `;
+            document.head.appendChild(style);
+        })();
+
+        // Initialize the application
+        document.addEventListener('DOMContentLoaded', function() {
+            // Set initial focus on login input
+            const accessCodeInput = document.getElementById('accessCode');
+            if (accessCodeInput) {
+                accessCodeInput.focus();
+            }
+            
+            // Add keyboard support for login
+            document.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter' && !document.getElementById('dashboard').classList.contains('hidden')) {
+                    return; // Don't interfere with dashboard
+                }
+                if (e.key === 'Enter') {
+                    const modal = document.getElementById('keypadModal');
+                    if (!modal.classList.contains('hidden')) {
+                        submitCode();
+                    } else {
+                        showDashboard();
+                    }
+                }
+            });
+        });
+    </script>
+</body>
+</html>

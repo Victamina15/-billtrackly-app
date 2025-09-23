@@ -106,6 +106,34 @@ export const companySettings = pgTable("company_settings", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+export const orderTimestamps = pgTable("order_timestamps", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  invoiceId: varchar("invoice_id").references(() => invoices.id).notNull(),
+  status: text("status").notNull(), // 'received', 'in_process', 'ready', 'delivered', 'cancelled'
+  timestamp: timestamp("timestamp").defaultNow(),
+  employeeId: varchar("employee_id").references(() => employees.id),
+  notes: text("notes"),
+  previousStatus: text("previous_status"),
+  duration: integer("duration"), // Duration in minutes from previous status
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const deliveryMetrics = pgTable("delivery_metrics", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  invoiceId: varchar("invoice_id").references(() => invoices.id).notNull(),
+  estimatedDeliveryTime: integer("estimated_delivery_time"), // Estimated time in hours
+  actualDeliveryTime: integer("actual_delivery_time"), // Actual time in minutes
+  processingTime: integer("processing_time"), // Time from received to ready (minutes)
+  readyToDeliveredTime: integer("ready_to_delivered_time"), // Time from ready to delivered (minutes)
+  totalTime: integer("total_time"), // Total time from received to delivered (minutes)
+  onTimeDelivery: boolean("on_time_delivery").default(false),
+  delayReason: text("delay_reason"),
+  priority: text("priority").default("normal"), // 'low', 'normal', 'high', 'urgent'
+  serviceType: text("service_type"), // 'wash', 'iron', 'both'
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 export const messageTemplates = pgTable("message_templates", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   type: text("type").notNull(), // 'order_ready', 'invoice_whatsapp', 'reminder', 'pending_payment'
@@ -378,6 +406,17 @@ export const insertAirtableSyncQueueSchema = createInsertSchema(airtableSyncQueu
   createdAt: true,
 });
 
+export const insertOrderTimestampSchema = createInsertSchema(orderTimestamps).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertDeliveryMetricsSchema = createInsertSchema(deliveryMetrics).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 // Types
 export type Employee = typeof employees.$inferSelect;
 export type InsertEmployee = z.infer<typeof insertEmployeeSchema>;
@@ -432,6 +471,12 @@ export type InsertAirtableConfig = z.infer<typeof insertAirtableConfigSchema>;
 
 export type AirtableSyncQueue = typeof airtableSyncQueue.$inferSelect;
 export type InsertAirtableSyncQueue = z.infer<typeof insertAirtableSyncQueueSchema>;
+
+export type OrderTimestamp = typeof orderTimestamps.$inferSelect;
+export type InsertOrderTimestamp = z.infer<typeof insertOrderTimestampSchema>;
+
+export type DeliveryMetrics = typeof deliveryMetrics.$inferSelect;
+export type InsertDeliveryMetrics = z.infer<typeof insertDeliveryMetricsSchema>;
 
 // PATCH request schemas for order management
 export const patchOrderStatusSchema = z.object({

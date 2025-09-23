@@ -1,7 +1,7 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertCustomerSchema, insertServiceSchema, insertInvoiceSchema, insertInvoiceItemSchema, insertPaymentMethodSchema, insertCompanySettingsSchema, insertMessageTemplateSchema, insertEmployeeSchema, patchEmployeeSchema, updateEmployeeSchema, patchOrderStatusSchema, patchOrderPaymentSchema, patchOrderCancelSchema, patchInvoicePaySchema, insertWhatsappConfigSchema, createCashClosureSchema, insertCashClosurePaymentSchema, metricsQuerySchema, cashClosuresQuerySchema, insertAirtableConfigSchema, insertAirtableSyncQueueSchema } from "@shared/schema";
+import { insertCustomerSchema, insertServiceSchema, insertInvoiceSchema, insertInvoiceItemSchema, insertPaymentMethodSchema, insertCompanySettingsSchema, insertMessageTemplateSchema, insertEmployeeSchema, patchEmployeeSchema, updateEmployeeSchema, patchOrderStatusSchema, patchOrderPaymentSchema, patchOrderCancelSchema, patchInvoicePaySchema, insertWhatsappConfigSchema, createCashClosureSchema, insertCashClosurePaymentSchema, metricsQuerySchema, cashClosuresQuerySchema, insertAirtableConfigSchema, insertAirtableSyncQueueSchema, insertOrderTimestampSchema, insertDeliveryMetricsSchema } from "@shared/schema";
 import { z } from "zod";
 import type { WhatsappConfig } from "@shared/schema";
 
@@ -408,7 +408,97 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Don't fail the status update if WhatsApp fails
         }
       }
-      
+
+      // Delivery tracking: Create timestamp and update metrics
+      try {
+        // Get existing timestamps to calculate duration
+        const existingTimestamps = await storage.getOrderTimestamps(id);
+        const previousTimestamp = existingTimestamps.length > 0
+          ? existingTimestamps[existingTimestamps.length - 1]
+          : null;
+
+        // Calculate duration from previous status
+        let duration = 0;
+        if (previousTimestamp) {
+          const now = new Date();
+          const prevTime = new Date(previousTimestamp.timestamp || 0);
+          duration = Math.floor((now.getTime() - prevTime.getTime()) / (1000 * 60)); // minutes
+        }
+
+        // Create timestamp for this status change
+        await storage.createOrderTimestamp({
+          invoiceId: id,
+          status,
+          employeeId: req.employee.id,
+          previousStatus: currentStatus,
+          duration,
+          notes: `Status changed from ${currentStatus} to ${status}`,
+        });
+
+        // Update delivery metrics when status changes
+        const existingMetrics = await storage.getDeliveryMetrics(id);
+        const timestamps = await storage.getOrderTimestamps(id);
+
+        // Calculate service type from invoice items
+        const items = await storage.getInvoiceItems(id);
+        const primaryServiceType = items.length > 0 ? items[0].serviceType : 'unknown';
+
+        if (existingMetrics) {
+          // Update existing metrics
+          const updates: any = { serviceType: primaryServiceType };
+
+          if (status === 'ready') {
+            // Calculate processing time (received to ready)
+            const receivedTs = timestamps.find(ts => ts.status === 'received');
+            const readyTs = timestamps.find(ts => ts.status === 'ready');
+            if (receivedTs && readyTs) {
+              const processingTime = Math.floor(
+                (new Date(readyTs.timestamp || 0).getTime() - new Date(receivedTs.timestamp || 0).getTime()) / (1000 * 60)
+              );
+              updates.processingTime = processingTime;
+            }
+          } else if (status === 'delivered') {
+            // Calculate total time and delivery performance
+            const receivedTs = timestamps.find(ts => ts.status === 'received');
+            const readyTs = timestamps.find(ts => ts.status === 'ready');
+            const deliveredTs = timestamps.find(ts => ts.status === 'delivered');
+
+            if (receivedTs && deliveredTs) {
+              const totalTime = Math.floor(
+                (new Date(deliveredTs.timestamp || 0).getTime() - new Date(receivedTs.timestamp || 0).getTime()) / (1000 * 60)
+              );
+              updates.totalTime = totalTime;
+              updates.actualDeliveryTime = totalTime;
+
+              // Check if delivered on time (assuming 24 hours = 1440 minutes standard)
+              const estimatedTime = existingMetrics.estimatedDeliveryTime || 24; // hours
+              updates.onTimeDelivery = totalTime <= (estimatedTime * 60);
+            }
+
+            if (readyTs && deliveredTs) {
+              const readyToDeliveredTime = Math.floor(
+                (new Date(deliveredTs.timestamp || 0).getTime() - new Date(readyTs.timestamp || 0).getTime()) / (1000 * 60)
+              );
+              updates.readyToDeliveredTime = readyToDeliveredTime;
+            }
+          }
+
+          await storage.updateDeliveryMetrics(id, updates);
+        } else {
+          // Create initial metrics
+          const estimatedDeliveryTime = primaryServiceType === 'both' ? 48 : 24; // hours
+          await storage.createDeliveryMetrics({
+            invoiceId: id,
+            estimatedDeliveryTime,
+            serviceType: primaryServiceType,
+            priority: 'normal',
+          });
+        }
+      } catch (trackingError) {
+        console.error('Error updating delivery tracking:', trackingError);
+        // Don't fail the status update if tracking fails
+      }
+
       res.json(updatedInvoice);
       
     } catch (error) {
@@ -1202,6 +1292,116 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await storage.deleteAirtableSyncQueueItem(id);
       res.status(204).send();
     } catch (error) {
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  // ==================== DELIVERY TRACKING ROUTES ====================
+
+  // Get order timestamps for a specific invoice
+  app.get("/api/invoices/:id/timestamps", requireAuthentication, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const timestamps = await storage.getOrderTimestamps(id);
+      res.json(timestamps);
+    } catch (error) {
+      console.error('Error fetching order timestamps:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  // Create a new order timestamp
+  app.post("/api/invoices/:id/timestamps", requireAuthentication, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { id } = req.params;
+      const timestampData = insertOrderTimestampSchema.parse({
+        ...req.body,
+        invoiceId: id,
+        employeeId: req.employee?.id,
+      });
+
+      const timestamp = await storage.createOrderTimestamp(timestampData);
+      res.status(201).json(timestamp);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({
+          message: "Validation error",
+          errors: error.errors
+        });
+      }
+      console.error('Error creating order timestamp:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  // Get delivery metrics for a specific invoice
+  app.get("/api/invoices/:id/delivery-metrics", requireAuthentication, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const metrics = await storage.getDeliveryMetrics(id);
+      if (!metrics) {
+        return res.status(404).json({ message: "Delivery metrics not found" });
+      }
+      res.json(metrics);
+    } catch (error) {
+      console.error('Error fetching delivery metrics:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  // Create delivery metrics for an invoice
+  app.post("/api/invoices/:id/delivery-metrics", requireAuthentication, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const metricsData = insertDeliveryMetricsSchema.parse({
+        ...req.body,
+        invoiceId: id,
+      });
+
+      const metrics = await storage.createDeliveryMetrics(metricsData);
+      res.status(201).json(metrics);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({
+          message: "Validation error",
+          errors: error.errors
+        });
+      }
+      console.error('Error creating delivery metrics:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  // Update delivery metrics for an invoice
+  app.put("/api/invoices/:id/delivery-metrics", requireAuthentication, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const updates = req.body;
+
+      const metrics = await storage.updateDeliveryMetrics(id, updates);
+      if (!metrics) {
+        return res.status(404).json({ message: "Delivery metrics not found" });
+      }
+      res.json(metrics);
+    } catch (error) {
+      console.error('Error updating delivery metrics:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  // Get delivery analytics with optional date filtering
+  app.get("/api/delivery-analytics", requireAuthentication, async (req, res) => {
+    try {
+      const { dateFrom, dateTo } = req.query;
+
+      const analytics = await storage.getDeliveryAnalytics(
+        dateFrom as string,
+        dateTo as string
+      );
+
+      res.json(analytics);
+    } catch (error) {
+      console.error('Error fetching delivery analytics:', error);
       res.status(500).json({ message: "Server error" });
     }
   });

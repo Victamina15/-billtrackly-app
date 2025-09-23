@@ -24,7 +24,8 @@ import {
   Trash2,
   MoreVertical,
   ChevronDown,
-  Settings
+  Settings,
+  TrendingUp
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -37,6 +38,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { apiRequest } from '@/lib/queryClient';
 import type { Invoice, InvoiceItem, PaymentMethod } from '@shared/schema';
+import DeliveryTracking from './delivery-tracking';
 
 // Helper function for authenticated API requests
 async function authenticatedRequest(url: string, method: string, data?: any) {
@@ -76,6 +78,7 @@ export default function OrderManagement({ onNotification }: OrderManagementProps
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [showWorkTicketModal, setShowWorkTicketModal] = useState(false);
+  const [showDeliveryTracking, setShowDeliveryTracking] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
   const [paymentReference, setPaymentReference] = useState('');
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string>('');
@@ -359,6 +362,22 @@ export default function OrderManagement({ onNotification }: OrderManagementProps
     );
   }
 
+  // Show delivery tracking if enabled
+  if (showDeliveryTracking && selectedOrder) {
+    return (
+      <DeliveryTracking
+        invoiceId={selectedOrder.id}
+        invoiceNumber={selectedOrder.number}
+        currentStatus={selectedOrder.status || 'received'}
+        customerName={selectedOrder.customerName}
+        onBack={() => {
+          setShowDeliveryTracking(false);
+          setSelectedOrder(null);
+        }}
+      />
+    );
+  }
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -597,7 +616,20 @@ export default function OrderManagement({ onNotification }: OrderManagementProps
                       >
                         <Phone className="h-4 w-4" />
                       </Button>
-                      
+
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          setSelectedOrder(order);
+                          setShowDeliveryTracking(true);
+                        }}
+                        className="tech-button-3d bg-white border-2 border-cyan-300 text-cyan-700 dark:from-cyan-500/20 dark:to-blue-600/20 dark:text-white dark:border-cyan-500/30 rounded-lg shadow-sm p-3 hover:bg-cyan-50 hover:border-cyan-400 dark:hover:from-cyan-400/30 dark:hover:to-blue-500/30 transition-all duration-300 cursor-pointer transform hover:scale-105 hover:-translate-y-1 dark:backdrop-blur-sm font-semibold"
+                        data-testid={`button-delivery-tracking-${order.id}`}
+                        title="Ver seguimiento de entrega"
+                      >
+                        <TrendingUp className="h-4 w-4" />
+                      </Button>
+
                       {/* Menú dropdown mejorado con diseño 3D */}
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>

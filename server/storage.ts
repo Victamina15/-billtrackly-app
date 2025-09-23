@@ -1,4 +1,4 @@
-import { type Employee, type InsertEmployee, type Customer, type InsertCustomer, type Service, type InsertService, type Invoice, type InsertInvoice, type InvoiceItem, type InsertInvoiceItem, type PaymentMethod, type InsertPaymentMethod, type CompanySettings, type InsertCompanySettings, type MessageTemplate, type InsertMessageTemplate, type Counter, type InsertCounter, type WhatsappConfig, type InsertWhatsappConfig, type CashClosure, type InsertCashClosure, type CashClosurePayment, type InsertCashClosurePayment, type AirtableConfig, type InsertAirtableConfig, type AirtableSyncQueue, type InsertAirtableSyncQueue, employees, customers, services, invoices, invoiceItems, paymentMethods, companySettings, messageTemplates, counters, whatsappConfig, cashClosures, cashClosurePayments, airtableConfig, airtableSyncQueue } from "@shared/schema";
+import { type Employee, type InsertEmployee, type Customer, type InsertCustomer, type Service, type InsertService, type Invoice, type InsertInvoice, type InvoiceItem, type InsertInvoiceItem, type PaymentMethod, type InsertPaymentMethod, type CompanySettings, type InsertCompanySettings, type MessageTemplate, type InsertMessageTemplate, type Counter, type InsertCounter, type WhatsappConfig, type InsertWhatsappConfig, type CashClosure, type InsertCashClosure, type CashClosurePayment, type InsertCashClosurePayment, type AirtableConfig, type InsertAirtableConfig, type AirtableSyncQueue, type InsertAirtableSyncQueue, type OrderTimestamp, type InsertOrderTimestamp, type DeliveryMetrics, type InsertDeliveryMetrics, employees, customers, services, invoices, invoiceItems, paymentMethods, companySettings, messageTemplates, counters, whatsappConfig, cashClosures, cashClosurePayments, airtableConfig, airtableSyncQueue, orderTimestamps, deliveryMetrics } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
 import { eq, desc, sql } from "drizzle-orm";
@@ -82,6 +82,22 @@ export interface IStorage {
   createAirtableSyncQueueItem(item: InsertAirtableSyncQueue): Promise<AirtableSyncQueue>;
   updateAirtableSyncQueueItem(id: string, updates: Partial<AirtableSyncQueue>): Promise<AirtableSyncQueue | undefined>;
   deleteAirtableSyncQueueItem(id: string): Promise<void>;
+
+  // Order Timestamps & Delivery Tracking
+  getOrderTimestamps(invoiceId: string): Promise<OrderTimestamp[]>;
+  createOrderTimestamp(timestamp: InsertOrderTimestamp): Promise<OrderTimestamp>;
+  getDeliveryMetrics(invoiceId: string): Promise<DeliveryMetrics | undefined>;
+  createDeliveryMetrics(metrics: InsertDeliveryMetrics): Promise<DeliveryMetrics>;
+  updateDeliveryMetrics(invoiceId: string, updates: Partial<DeliveryMetrics>): Promise<DeliveryMetrics | undefined>;
+  getDeliveryAnalytics(dateFrom?: string, dateTo?: string): Promise<{
+    avgProcessingTime: number;
+    avgTotalTime: number;
+    onTimePercentage: number;
+    totalOrders: number;
+    delayedOrders: number;
+    byServiceType: Record<string, any>;
+    byPriority: Record<string, any>;
+  }>;
   
   // Metrics and Analytics
   getDailyMetrics(date: string): Promise<{
@@ -122,6 +138,8 @@ export class MemStorage implements IStorage {
   private cashClosurePayments: Map<string, CashClosurePayment>;
   private airtableConfig: AirtableConfig | undefined;
   private airtableSyncQueue: Map<string, AirtableSyncQueue>;
+  private orderTimestamps: Map<string, OrderTimestamp>;
+  private deliveryMetrics: Map<string, DeliveryMetrics>;
   private invoiceCounter: number;
 
   // Helper methods for access code hashing
@@ -153,6 +171,8 @@ export class MemStorage implements IStorage {
     this.cashClosurePayments = new Map();
     this.airtableConfig = undefined;
     this.airtableSyncQueue = new Map();
+    this.orderTimestamps = new Map();
+    this.deliveryMetrics = new Map();
     this.invoiceCounter = 10;
     
     // Initialize data asynchronously
@@ -986,6 +1006,120 @@ export class MemStorage implements IStorage {
       }))
     };
   }
+
+  // Order Timestamps & Delivery Tracking
+  async getOrderTimestamps(invoiceId: string): Promise<OrderTimestamp[]> {
+    return Array.from(this.orderTimestamps.values())
+      .filter(ts => ts.invoiceId === invoiceId)
+      .sort((a, b) => new Date(a.timestamp || 0).getTime() - new Date(b.timestamp || 0).getTime());
+  }
+
+  async createOrderTimestamp(timestamp: InsertOrderTimestamp): Promise<OrderTimestamp> {
+    const id = randomUUID();
+    const newTimestamp: OrderTimestamp = {
+      ...timestamp,
+      id,
+      timestamp: timestamp.timestamp || new Date(),
+      createdAt: new Date(),
+    };
+    this.orderTimestamps.set(id, newTimestamp);
+    return newTimestamp;
+  }
+
+  async getDeliveryMetrics(invoiceId: string): Promise<DeliveryMetrics | undefined> {
+    return Array.from(this.deliveryMetrics.values()).find(m => m.invoiceId === invoiceId);
+  }
+
+  async createDeliveryMetrics(metrics: InsertDeliveryMetrics): Promise<DeliveryMetrics> {
+    const id = randomUUID();
+    const newMetrics: DeliveryMetrics = {
+      ...metrics,
+      id,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    this.deliveryMetrics.set(id, newMetrics);
+    return newMetrics;
+  }
+
+  async updateDeliveryMetrics(invoiceId: string, updates: Partial<DeliveryMetrics>): Promise<DeliveryMetrics | undefined> {
+    const existing = await this.getDeliveryMetrics(invoiceId);
+    if (!existing) return undefined;
+
+    const updated: DeliveryMetrics = {
+      ...existing,
+      ...updates,
+      updatedAt: new Date(),
+    };
+    this.deliveryMetrics.set(existing.id, updated);
+    return updated;
+  }
+
+  async getDeliveryAnalytics(dateFrom?: string, dateTo?: string): Promise<{
+    avgProcessingTime: number;
+    avgTotalTime: number;
+    onTimePercentage: number;
+    totalOrders: number;
+    delayedOrders: number;
+    byServiceType: Record<string, any>;
+    byPriority: Record<string, any>;
+  }> {
+    const allMetrics = Array.from(this.deliveryMetrics.values());
+    let filteredMetrics = allMetrics;
+
+    if (dateFrom || dateTo) {
+      filteredMetrics = allMetrics.filter(metric => {
+        const createdAt = new Date(metric.createdAt || 0);
+        if (dateFrom && createdAt < new Date(dateFrom)) return false;
+        if (dateTo && createdAt > new Date(dateTo)) return false;
+        return true;
+      });
+    }
+
+    const totalOrders = filteredMetrics.length;
+    const delayedOrders = filteredMetrics.filter(m => !m.onTimeDelivery).length;
+    const onTimePercentage = totalOrders > 0 ? (totalOrders - delayedOrders) / totalOrders * 100 : 0;
+
+    const avgProcessingTime = totalOrders > 0
+      ? filteredMetrics.reduce((sum, m) => sum + (m.processingTime || 0), 0) / totalOrders
+      : 0;
+
+    const avgTotalTime = totalOrders > 0
+      ? filteredMetrics.reduce((sum, m) => sum + (m.totalTime || 0), 0) / totalOrders
+      : 0;
+
+    const byServiceType = filteredMetrics.reduce((acc, metric) => {
+      const type = metric.serviceType || 'unknown';
+      if (!acc[type]) {
+        acc[type] = { count: 0, avgTime: 0, onTime: 0 };
+      }
+      acc[type].count++;
+      acc[type].avgTime = (acc[type].avgTime * (acc[type].count - 1) + (metric.totalTime || 0)) / acc[type].count;
+      if (metric.onTimeDelivery) acc[type].onTime++;
+      return acc;
+    }, {} as Record<string, any>);
+
+    const byPriority = filteredMetrics.reduce((acc, metric) => {
+      const priority = metric.priority || 'normal';
+      if (!acc[priority]) {
+        acc[priority] = { count: 0, avgTime: 0, onTime: 0 };
+      }
+      acc[priority].count++;
+      acc[priority].avgTime = (acc[priority].avgTime * (acc[priority].count - 1) + (metric.totalTime || 0)) / acc[priority].count;
+      if (metric.onTimeDelivery) acc[priority].onTime++;
+      return acc;
+    }, {} as Record<string, any>);
+
+    return {
+      avgProcessingTime,
+      avgTotalTime,
+      onTimePercentage,
+      totalOrders,
+      delayedOrders,
+      byServiceType,
+      byPriority,
+    };
+  }
 }
 
 // DatabaseStorage implementation using PostgreSQL with Drizzle ORM
@@ -1567,6 +1701,98 @@ export class DatabaseStorage implements IStorage {
         total: pb.total,
         count: pb.count
       }))
+    };
+  }
+
+  // Order Timestamps & Delivery Tracking
+  async getOrderTimestamps(invoiceId: string): Promise<OrderTimestamp[]> {
+    return await db.select().from(orderTimestamps)
+      .where(eq(orderTimestamps.invoiceId, invoiceId))
+      .orderBy(orderTimestamps.timestamp);
+  }
+
+  async createOrderTimestamp(timestamp: InsertOrderTimestamp): Promise<OrderTimestamp> {
+    const [newTimestamp] = await db.insert(orderTimestamps).values(timestamp).returning();
+    return newTimestamp;
+  }
+
+  async getDeliveryMetrics(invoiceId: string): Promise<DeliveryMetrics | undefined> {
+    const [metrics] = await db.select().from(deliveryMetrics)
+      .where(eq(deliveryMetrics.invoiceId, invoiceId));
+    return metrics || undefined;
+  }
+
+  async createDeliveryMetrics(metrics: InsertDeliveryMetrics): Promise<DeliveryMetrics> {
+    const [newMetrics] = await db.insert(deliveryMetrics).values(metrics).returning();
+    return newMetrics;
+  }
+
+  async updateDeliveryMetrics(invoiceId: string, updates: Partial<DeliveryMetrics>): Promise<DeliveryMetrics | undefined> {
+    const [updated] = await db.update(deliveryMetrics)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(deliveryMetrics.invoiceId, invoiceId))
+      .returning();
+    return updated || undefined;
+  }
+
+  async getDeliveryAnalytics(dateFrom?: string, dateTo?: string): Promise<{
+    avgProcessingTime: number;
+    avgTotalTime: number;
+    onTimePercentage: number;
+    totalOrders: number;
+    delayedOrders: number;
+    byServiceType: Record<string, any>;
+    byPriority: Record<string, any>;
+  }> {
+    const conditions = [];
+    if (dateFrom) conditions.push(sql`${deliveryMetrics.createdAt} >= ${new Date(dateFrom)}`);
+    if (dateTo) conditions.push(sql`${deliveryMetrics.createdAt} <= ${new Date(dateTo)}`);
+
+    const metrics = await db.select().from(deliveryMetrics)
+      .where(conditions.length > 0 ? sql.join(conditions, sql` AND `) : undefined);
+
+    const totalOrders = metrics.length;
+    const delayedOrders = metrics.filter(m => !m.onTimeDelivery).length;
+    const onTimePercentage = totalOrders > 0 ? (totalOrders - delayedOrders) / totalOrders * 100 : 0;
+
+    const avgProcessingTime = totalOrders > 0
+      ? metrics.reduce((sum, m) => sum + (m.processingTime || 0), 0) / totalOrders
+      : 0;
+
+    const avgTotalTime = totalOrders > 0
+      ? metrics.reduce((sum, m) => sum + (m.totalTime || 0), 0) / totalOrders
+      : 0;
+
+    const byServiceType = metrics.reduce((acc, metric) => {
+      const type = metric.serviceType || 'unknown';
+      if (!acc[type]) {
+        acc[type] = { count: 0, avgTime: 0, onTime: 0 };
+      }
+      acc[type].count++;
+      acc[type].avgTime = (acc[type].avgTime * (acc[type].count - 1) + (metric.totalTime || 0)) / acc[type].count;
+      if (metric.onTimeDelivery) acc[type].onTime++;
+      return acc;
+    }, {} as Record<string, any>);
+
+    const byPriority = metrics.reduce((acc, metric) => {
+      const priority = metric.priority || 'normal';
+      if (!acc[priority]) {
+        acc[priority] = { count: 0, avgTime: 0, onTime: 0 };
+      }
+      acc[priority].count++;
+      acc[priority].avgTime = (acc[priority].avgTime * (acc[priority].count - 1) + (metric.totalTime || 0)) / acc[priority].count;
+      if (metric.onTimeDelivery) acc[priority].onTime++;
+      return acc;
+    }, {} as Record<string, any>);
+
+    return {
+      avgProcessingTime,
+      avgTotalTime,
+      onTimePercentage,
+      totalOrders,
+      delayedOrders,
+      byServiceType,
+      byPriority,
     };
   }
 }
