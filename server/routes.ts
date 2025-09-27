@@ -1,7 +1,7 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertCustomerSchema, insertServiceSchema, insertInvoiceSchema, insertInvoiceItemSchema, insertPaymentMethodSchema, insertCompanySettingsSchema, insertMessageTemplateSchema, insertEmployeeSchema, patchEmployeeSchema, updateEmployeeSchema, patchOrderStatusSchema, patchOrderPaymentSchema, patchOrderCancelSchema, patchInvoicePaySchema, insertWhatsappConfigSchema, createCashClosureSchema, insertCashClosurePaymentSchema, metricsQuerySchema, cashClosuresQuerySchema, insertAirtableConfigSchema, insertAirtableSyncQueueSchema, insertOrderTimestampSchema, insertDeliveryMetricsSchema, insertUserSchema } from "@shared/schema";
+import { insertCustomerSchema, insertServiceSchema, insertInvoiceSchema, insertInvoiceItemSchema, insertPaymentMethodSchema, insertCompanySettingsSchema, insertMessageTemplateSchema, insertEmployeeSchema, patchEmployeeSchema, updateEmployeeSchema, patchOrderStatusSchema, patchOrderPaymentSchema, patchOrderCancelSchema, patchInvoicePaySchema, insertWhatsappConfigSchema, createCashClosureSchema, insertCashClosurePaymentSchema, metricsQuerySchema, cashClosuresQuerySchema, insertAirtableConfigSchema, insertAirtableSyncQueueSchema, insertOrderTimestampSchema, insertDeliveryMetricsSchema, insertUserSchema, insertOrganizationSchema } from "@shared/schema";
 import { z } from "zod";
 import type { WhatsappConfig } from "@shared/schema";
 import { EmailService } from "./email-service";
@@ -45,6 +45,11 @@ interface AuthenticatedRequest extends Request {
   employee?: any;
 }
 
+interface UserAuthenticatedRequest extends Request {
+  user?: any;
+  organization?: any;
+}
+
 async function requireAuthentication(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const accessCode = req.headers['x-access-code'] as string;
@@ -73,15 +78,68 @@ async function requireManagerRole(req: AuthenticatedRequest, res: Response, next
     if (!req.employee) {
       return res.status(401).json({ message: "Authentication required" });
     }
-    
+
     if (req.employee.role !== 'manager') {
       return res.status(403).json({ message: "Manager role required for this operation" });
     }
-    
+
     next();
   } catch (error) {
     res.status(500).json({ message: "Authorization error" });
   }
+}
+
+// User authentication middleware
+async function requireUserAuthentication(req: UserAuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1]; // Bearer token
+
+    if (!token) {
+      return res.status(401).json({ message: "Access token required" });
+    }
+
+    const session = await storage.getUserSession(token);
+    if (!session) {
+      return res.status(401).json({ message: "Invalid or expired session" });
+    }
+
+    const user = await storage.getUser(session.userId);
+    if (!user || !user.isActive || !user.isEmailVerified) {
+      return res.status(401).json({ message: "User account is not active or verified" });
+    }
+
+    let organization = null;
+    if (user.organizationId) {
+      organization = await storage.getOrganization(user.organizationId);
+    }
+
+    req.user = user;
+    req.organization = organization;
+    next();
+  } catch (error) {
+    console.error('[User Authentication] Error:', error);
+    res.status(500).json({ message: "Authentication error" });
+  }
+}
+
+// Role-based authorization for users
+async function requireUserRole(roles: string[]) {
+  return async (req: UserAuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ message: "User authentication required" });
+      }
+
+      if (!roles.includes(req.user.role)) {
+        return res.status(403).json({ message: `Required role: ${roles.join(' or ')}` });
+      }
+
+      next();
+    } catch (error) {
+      res.status(500).json({ message: "Authorization error" });
+    }
+  };
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -118,6 +176,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Generate activation token
       const activationToken = crypto.randomBytes(32).toString('hex');
+      const tokenExpiry = new Date();
+      tokenExpiry.setHours(tokenExpiry.getHours() + 24); // 24 hours from now
 
       // Create user with verification token
       const user = await storage.createUser({
@@ -125,6 +185,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         password: hashedPassword,
         isEmailVerified: false,
         emailVerificationToken: activationToken,
+        emailVerificationExpires: tokenExpiry,
       });
 
       // Generate activation URL
@@ -185,6 +246,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const activatedUser = await storage.updateUser(user.id, {
         isEmailVerified: true,
         emailVerificationToken: null,
+        emailVerificationExpires: null,
         isActive: true,
       });
 
@@ -224,10 +286,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Generate new activation token
       const activationToken = crypto.randomBytes(32).toString('hex');
+      const tokenExpiry = new Date();
+      tokenExpiry.setHours(tokenExpiry.getHours() + 24); // 24 hours from now
 
       // Update user with new token
       await storage.updateUser(user.id, {
         emailVerificationToken: activationToken,
+        emailVerificationExpires: tokenExpiry,
       });
 
       // Generate activation URL
@@ -249,6 +314,149 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     } catch (error) {
       console.error("Resend activation error:", error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  // User Login with Session Management
+  app.post("/api/auth/user-login", async (req, res) => {
+    try {
+      const { email, password } = req.body;
+
+      if (!email || !password) {
+        return res.status(400).json({ message: "Email and password are required" });
+      }
+
+      // Find user by email
+      const user = await storage.getUserByEmail(email);
+      if (!user) {
+        return res.status(401).json({ message: "Invalid credentials" });
+      }
+
+      // Check if user is verified and active
+      if (!user.isEmailVerified) {
+        return res.status(401).json({ message: "Please verify your email before logging in" });
+      }
+
+      if (!user.isActive) {
+        return res.status(401).json({ message: "Account is deactivated" });
+      }
+
+      // Verify password
+      const passwordValid = await bcrypt.compare(password, user.password);
+      if (!passwordValid) {
+        return res.status(401).json({ message: "Invalid credentials" });
+      }
+
+      // Generate session token
+      const sessionToken = crypto.randomBytes(32).toString('hex');
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + 7); // 7 days
+
+      // Create session
+      const session = await storage.createUserSession({
+        userId: user.id,
+        token: sessionToken,
+        expiresAt,
+      });
+
+      // Update last login
+      await storage.updateUser(user.id, {
+        lastLoginAt: new Date(),
+      });
+
+      // Get organization info if exists
+      let organization = null;
+      if (user.organizationId) {
+        organization = await storage.getOrganization(user.organizationId);
+      }
+
+      // Return safe user data
+      const { password: _, emailVerificationToken, ...safeUser } = user;
+
+      res.json({
+        message: "Login successful",
+        user: safeUser,
+        organization,
+        token: sessionToken,
+        expiresAt: session.expiresAt,
+      });
+
+    } catch (error) {
+      console.error("Login error:", error);
+      res.status(500).json({ message: "Server error during login" });
+    }
+  });
+
+  // User Logout
+  app.post("/api/auth/logout", requireUserAuthentication, async (req: UserAuthenticatedRequest, res) => {
+    try {
+      const authHeader = req.headers['authorization'];
+      const token = authHeader && authHeader.split(' ')[1];
+
+      if (token) {
+        await storage.deleteUserSession(token);
+      }
+
+      res.json({ message: "Logged out successfully" });
+    } catch (error) {
+      console.error("Logout error:", error);
+      res.status(500).json({ message: "Server error during logout" });
+    }
+  });
+
+  // Organization Setup Route
+  app.post("/api/organizations", requireUserAuthentication, async (req: UserAuthenticatedRequest, res) => {
+    try {
+      // Only allow users who don't have an organization yet
+      if (req.user.organizationId) {
+        return res.status(400).json({ message: "User already belongs to an organization" });
+      }
+
+      const orgData = insertOrganizationSchema.parse(req.body);
+
+      // Check if subdomain is already taken
+      if (orgData.subdomain) {
+        const existingOrg = await storage.getOrganizationBySubdomain(orgData.subdomain);
+        if (existingOrg) {
+          return res.status(400).json({ message: "Subdomain is already taken" });
+        }
+      }
+
+      // Create organization
+      const organization = await storage.createOrganization(orgData);
+
+      // Update user to be owner of this organization
+      await storage.updateUser(req.user.id, {
+        organizationId: organization.id,
+        role: 'owner',
+      });
+
+      res.status(201).json({
+        message: "Organization created successfully",
+        organization,
+      });
+
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid data", errors: error.errors });
+      }
+      console.error("Organization creation error:", error);
+      res.status(500).json({ message: "Server error during organization creation" });
+    }
+  });
+
+  // Get Current User Profile
+  app.get("/api/auth/me", requireUserAuthentication, async (req: UserAuthenticatedRequest, res) => {
+    try {
+      const { password, emailVerificationToken, ...safeUser } = req.user;
+
+      res.json({
+        user: safeUser,
+        organization: req.organization,
+      });
+    } catch (error) {
+      console.error("Get profile error:", error);
       res.status(500).json({ message: "Server error" });
     }
   });

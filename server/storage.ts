@@ -1,4 +1,4 @@
-import { type Employee, type InsertEmployee, type Customer, type InsertCustomer, type Service, type InsertService, type Invoice, type InsertInvoice, type InvoiceItem, type InsertInvoiceItem, type PaymentMethod, type InsertPaymentMethod, type CompanySettings, type InsertCompanySettings, type MessageTemplate, type InsertMessageTemplate, type Counter, type InsertCounter, type WhatsappConfig, type InsertWhatsappConfig, type CashClosure, type InsertCashClosure, type CashClosurePayment, type InsertCashClosurePayment, type AirtableConfig, type InsertAirtableConfig, type AirtableSyncQueue, type InsertAirtableSyncQueue, type OrderTimestamp, type InsertOrderTimestamp, type DeliveryMetrics, type InsertDeliveryMetrics, type User, type InsertUser, employees, customers, services, invoices, invoiceItems, paymentMethods, companySettings, messageTemplates, counters, whatsappConfig, cashClosures, cashClosurePayments, airtableConfig, airtableSyncQueue, orderTimestamps, deliveryMetrics, users } from "@shared/schema";
+import { type Employee, type InsertEmployee, type Customer, type InsertCustomer, type Service, type InsertService, type Invoice, type InsertInvoice, type InvoiceItem, type InsertInvoiceItem, type PaymentMethod, type InsertPaymentMethod, type CompanySettings, type InsertCompanySettings, type MessageTemplate, type InsertMessageTemplate, type Counter, type InsertCounter, type WhatsappConfig, type InsertWhatsappConfig, type CashClosure, type InsertCashClosure, type CashClosurePayment, type InsertCashClosurePayment, type AirtableConfig, type InsertAirtableConfig, type AirtableSyncQueue, type InsertAirtableSyncQueue, type OrderTimestamp, type InsertOrderTimestamp, type DeliveryMetrics, type InsertDeliveryMetrics, type User, type InsertUser, type Organization, type InsertOrganization, type UserSession, type InsertUserSession, employees, customers, services, invoices, invoiceItems, paymentMethods, companySettings, messageTemplates, counters, whatsappConfig, cashClosures, cashClosurePayments, airtableConfig, airtableSyncQueue, orderTimestamps, deliveryMetrics, users, organizations, userSessions } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
 import { eq, desc, sql, and } from "drizzle-orm";
@@ -19,6 +19,18 @@ export interface IStorage {
   getUserByEmailAndToken(email: string, token: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: string, updates: Partial<User>): Promise<User | undefined>;
+
+  // Organizations
+  getOrganization(id: string): Promise<Organization | undefined>;
+  getOrganizationBySubdomain(subdomain: string): Promise<Organization | undefined>;
+  createOrganization(org: InsertOrganization): Promise<Organization>;
+  updateOrganization(id: string, updates: Partial<Organization>): Promise<Organization | undefined>;
+
+  // User Sessions
+  createUserSession(session: InsertUserSession): Promise<UserSession>;
+  getUserSession(token: string): Promise<UserSession | undefined>;
+  deleteUserSession(token: string): Promise<void>;
+  deleteExpiredSessions(): Promise<void>;
 
   // Customers
   getCustomer(id: string): Promise<Customer | undefined>;
@@ -1189,7 +1201,11 @@ export class DatabaseStorage implements IStorage {
 
   async getUserByEmailAndToken(email: string, token: string): Promise<User | undefined> {
     const [user] = await db.select().from(users)
-      .where(and(eq(users.email, email), eq(users.emailVerificationToken, token)));
+      .where(and(
+        eq(users.email, email),
+        eq(users.emailVerificationToken, token),
+        sql`${users.emailVerificationExpires} > NOW()`
+      ));
     return user;
   }
 
@@ -1204,6 +1220,50 @@ export class DatabaseStorage implements IStorage {
       .where(eq(users.id, id))
       .returning();
     return updated;
+  }
+
+  // Organizations
+  async getOrganization(id: string): Promise<Organization | undefined> {
+    const [org] = await db.select().from(organizations).where(eq(organizations.id, id));
+    return org;
+  }
+
+  async getOrganizationBySubdomain(subdomain: string): Promise<Organization | undefined> {
+    const [org] = await db.select().from(organizations).where(eq(organizations.subdomain, subdomain));
+    return org;
+  }
+
+  async createOrganization(org: InsertOrganization): Promise<Organization> {
+    const [newOrg] = await db.insert(organizations).values(org).returning();
+    return newOrg;
+  }
+
+  async updateOrganization(id: string, updates: Partial<Organization>): Promise<Organization | undefined> {
+    const [updated] = await db.update(organizations)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(organizations.id, id))
+      .returning();
+    return updated;
+  }
+
+  // User Sessions
+  async createUserSession(session: InsertUserSession): Promise<UserSession> {
+    const [newSession] = await db.insert(userSessions).values(session).returning();
+    return newSession;
+  }
+
+  async getUserSession(token: string): Promise<UserSession | undefined> {
+    const [session] = await db.select().from(userSessions)
+      .where(and(eq(userSessions.token, token), sql`${userSessions.expiresAt} > NOW()`));
+    return session;
+  }
+
+  async deleteUserSession(token: string): Promise<void> {
+    await db.delete(userSessions).where(eq(userSessions.token, token));
+  }
+
+  async deleteExpiredSessions(): Promise<void> {
+    await db.delete(userSessions).where(sql`${userSessions.expiresAt} <= NOW()`);
   }
 
   // Customers
