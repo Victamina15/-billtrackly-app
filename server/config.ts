@@ -39,7 +39,7 @@ export function validateEnvironment(): EnvironmentConfig {
     PORT: parseInt(process.env.PORT || '5000', 10),
     DATABASE_URL: process.env.DATABASE_URL!,
     RESEND_API_KEY: process.env.RESEND_API_KEY!,
-    FROM_EMAIL: process.env.FROM_EMAIL || 'onboarding@resend.dev',
+    FROM_EMAIL: process.env.FROM_EMAIL || 'noreply@billtracky.com',
     APP_URL: process.env.APP_URL || 'http://localhost:5000',
   };
 }

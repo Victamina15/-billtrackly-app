@@ -14,6 +14,7 @@ export class EmailService {
   private static readonly FROM_EMAIL = config.FROM_EMAIL;
   private static readonly DEV_MODE = config.NODE_ENV !== 'production';
   private static readonly DEV_EMAIL = 'robinsonsilverio1844@gmail.com'; // Owner's email for testing
+  private static readonly FALLBACK_FROM_EMAIL = 'onboarding@resend.dev'; // Fallback for unverified domains
 
   static isConfigured(): boolean {
     const hasApiKey = !!config.RESEND_API_KEY;
@@ -27,6 +28,49 @@ export class EmailService {
     }
 
     return hasApiKey && hasFromEmail;
+  }
+
+  private static async getValidFromEmail(): Promise<string> {
+    // In development, always try the preferred FROM_EMAIL first
+    // If it fails, fall back to the resend.dev domain
+    if (this.DEV_MODE) {
+      return this.FROM_EMAIL;
+    }
+
+    // In production, use the configured FROM_EMAIL
+    return this.FROM_EMAIL;
+  }
+
+  private static async sendEmailWithFallback(emailData: any): Promise<{ data: any; error: any; fromEmail: string }> {
+    const preferredFrom = await this.getValidFromEmail();
+
+    try {
+      // Try with preferred FROM address first
+      const { data, error } = await resend.emails.send({
+        ...emailData,
+        from: preferredFrom,
+      });
+
+      if (!error) {
+        return { data, error: null, fromEmail: preferredFrom };
+      }
+
+      // If it's a domain verification error and we're in development, try fallback
+      if (error.statusCode === 403 && this.DEV_MODE && preferredFrom !== this.FALLBACK_FROM_EMAIL) {
+        console.warn(`⚠️ Domain not verified, falling back to ${this.FALLBACK_FROM_EMAIL}`);
+
+        const fallbackResult = await resend.emails.send({
+          ...emailData,
+          from: this.FALLBACK_FROM_EMAIL,
+        });
+
+        return { data: fallbackResult.data, error: fallbackResult.error, fromEmail: this.FALLBACK_FROM_EMAIL };
+      }
+
+      return { data, error, fromEmail: preferredFrom };
+    } catch (error) {
+      return { data: null, error, fromEmail: preferredFrom };
+    }
   }
 
   static async testConnection(): Promise<boolean> {
@@ -115,7 +159,7 @@ export class EmailService {
               <p>Best regards,<br>The BillTracky Team</p>
             </div>
             <div class="footer">
-              <p>This email was sent from BillTracky. Please do not reply to this email.</p>
+              <p>This email was sent from BillTracky (billtracky.com). Please do not reply to this email.</p>
             </div>
           </div>
         </body>
@@ -139,8 +183,7 @@ export class EmailService {
         The BillTracky Team
       `;
 
-      const { data: result, error } = await resend.emails.send({
-        from: this.FROM_EMAIL,
+      const { data: result, error, fromEmail } = await this.sendEmailWithFallback({
         to: actualTo,
         subject: actualSubject,
         html: htmlContent,
@@ -149,6 +192,10 @@ export class EmailService {
 
       if (this.DEV_MODE && actualTo !== to) {
         console.log(`[DEV MODE] Email redirected from ${to} to ${actualTo}`);
+      }
+
+      if (fromEmail !== this.FROM_EMAIL) {
+        console.log(`📧 Used fallback email address: ${fromEmail}`);
       }
 
       if (error) {
@@ -247,7 +294,7 @@ export class EmailService {
               <p>Best regards,<br>The BillTracky Team</p>
             </div>
             <div class="footer">
-              <p>This email was sent from BillTracky. Please do not reply to this email.</p>
+              <p>This email was sent from BillTracky (billtracky.com). Please do not reply to this email.</p>
             </div>
           </div>
         </body>
@@ -271,8 +318,7 @@ export class EmailService {
         The BillTracky Team
       `;
 
-      const { data: result, error } = await resend.emails.send({
-        from: this.FROM_EMAIL,
+      const { data: result, error, fromEmail } = await this.sendEmailWithFallback({
         to: actualTo,
         subject: actualSubject,
         html: htmlContent,
@@ -281,6 +327,10 @@ export class EmailService {
 
       if (this.DEV_MODE && actualTo !== to) {
         console.log(`[DEV MODE] Password reset email redirected from ${to} to ${actualTo}`);
+      }
+
+      if (fromEmail !== this.FROM_EMAIL) {
+        console.log(`📧 Used fallback email address: ${fromEmail}`);
       }
 
       if (error) {
