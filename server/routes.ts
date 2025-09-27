@@ -1,9 +1,12 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertCustomerSchema, insertServiceSchema, insertInvoiceSchema, insertInvoiceItemSchema, insertPaymentMethodSchema, insertCompanySettingsSchema, insertMessageTemplateSchema, insertEmployeeSchema, patchEmployeeSchema, updateEmployeeSchema, patchOrderStatusSchema, patchOrderPaymentSchema, patchOrderCancelSchema, patchInvoicePaySchema, insertWhatsappConfigSchema, createCashClosureSchema, insertCashClosurePaymentSchema, metricsQuerySchema, cashClosuresQuerySchema, insertAirtableConfigSchema, insertAirtableSyncQueueSchema, insertOrderTimestampSchema, insertDeliveryMetricsSchema } from "@shared/schema";
+import { insertCustomerSchema, insertServiceSchema, insertInvoiceSchema, insertInvoiceItemSchema, insertPaymentMethodSchema, insertCompanySettingsSchema, insertMessageTemplateSchema, insertEmployeeSchema, patchEmployeeSchema, updateEmployeeSchema, patchOrderStatusSchema, patchOrderPaymentSchema, patchOrderCancelSchema, patchInvoicePaySchema, insertWhatsappConfigSchema, createCashClosureSchema, insertCashClosurePaymentSchema, metricsQuerySchema, cashClosuresQuerySchema, insertAirtableConfigSchema, insertAirtableSyncQueueSchema, insertOrderTimestampSchema, insertDeliveryMetricsSchema, insertUserSchema } from "@shared/schema";
 import { z } from "zod";
 import type { WhatsappConfig } from "@shared/schema";
+import { EmailService } from "./email-service";
+import bcrypt from "bcrypt";
+import crypto from "crypto";
 
 // WhatsApp utility function
 async function sendWhatsAppMessage(phone: string, message: string, config: WhatsappConfig): Promise<boolean> {
@@ -88,13 +91,164 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { accessCode } = req.body;
       const employee = await storage.getEmployeeByAccessCode(accessCode);
-      
+
       if (!employee) {
         return res.status(401).json({ message: "Invalid access code" });
       }
-      
+
       res.json({ employee });
     } catch (error) {
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  // User Registration with Email Activation
+  app.post("/api/auth/register", async (req, res) => {
+    try {
+      const userData = insertUserSchema.parse(req.body);
+
+      // Check if user already exists
+      const existingUser = await storage.getUserByEmail(userData.email);
+      if (existingUser) {
+        return res.status(400).json({ message: "User already exists with this email" });
+      }
+
+      // Hash password
+      const hashedPassword = await bcrypt.hash(userData.password, 12);
+
+      // Generate activation token
+      const activationToken = crypto.randomBytes(32).toString('hex');
+
+      // Create user with verification token
+      const user = await storage.createUser({
+        ...userData,
+        password: hashedPassword,
+        isEmailVerified: false,
+        emailVerificationToken: activationToken,
+      });
+
+      // Generate activation URL
+      const baseUrl = process.env.APP_URL || `${req.protocol}://${req.get('host')}`;
+      const activationUrl = `${baseUrl}/activate?token=${activationToken}&email=${encodeURIComponent(userData.email)}`;
+
+      // Send activation email
+      const emailSent = await EmailService.sendUserActivationEmail({
+        to: userData.email,
+        username: `${userData.firstName} ${userData.lastName}`,
+        activationToken,
+        activationUrl,
+      });
+
+      if (!emailSent) {
+        console.warn("Failed to send activation email, but user was created");
+      }
+
+      // Don't return sensitive data
+      const { password, emailVerificationToken, ...safeUser } = user;
+
+      res.status(201).json({
+        message: "User registered successfully. Please check your email to activate your account.",
+        user: safeUser,
+        emailSent,
+      });
+
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid data", errors: error.errors });
+      }
+      console.error("Registration error:", error);
+      res.status(500).json({ message: "Server error during registration" });
+    }
+  });
+
+  // User Account Activation
+  app.post("/api/auth/activate", async (req, res) => {
+    try {
+      const { token, email } = req.body;
+
+      if (!token || !email) {
+        return res.status(400).json({ message: "Activation token and email are required" });
+      }
+
+      // Find user with matching email and token
+      const user = await storage.getUserByEmailAndToken(email, token);
+
+      if (!user) {
+        return res.status(400).json({ message: "Invalid or expired activation token" });
+      }
+
+      if (user.isEmailVerified) {
+        return res.status(400).json({ message: "Account is already activated" });
+      }
+
+      // Activate user
+      const activatedUser = await storage.updateUser(user.id, {
+        isEmailVerified: true,
+        emailVerificationToken: null,
+        isActive: true,
+      });
+
+      // Don't return sensitive data
+      const { password, emailVerificationToken, ...safeUser } = activatedUser;
+
+      res.json({
+        message: "Account activated successfully. You can now log in.",
+        user: safeUser,
+      });
+
+    } catch (error) {
+      console.error("Activation error:", error);
+      res.status(500).json({ message: "Server error during activation" });
+    }
+  });
+
+  // Resend Activation Email
+  app.post("/api/auth/resend-activation", async (req, res) => {
+    try {
+      const { email } = req.body;
+
+      if (!email) {
+        return res.status(400).json({ message: "Email is required" });
+      }
+
+      const user = await storage.getUserByEmail(email);
+
+      if (!user) {
+        // Don't reveal if user exists or not
+        return res.json({ message: "If an account exists with this email, an activation email will be sent." });
+      }
+
+      if (user.isEmailVerified) {
+        return res.status(400).json({ message: "Account is already activated" });
+      }
+
+      // Generate new activation token
+      const activationToken = crypto.randomBytes(32).toString('hex');
+
+      // Update user with new token
+      await storage.updateUser(user.id, {
+        emailVerificationToken: activationToken,
+      });
+
+      // Generate activation URL
+      const baseUrl = process.env.APP_URL || `${req.protocol}://${req.get('host')}`;
+      const activationUrl = `${baseUrl}/activate?token=${activationToken}&email=${encodeURIComponent(email)}`;
+
+      // Send activation email
+      const emailSent = await EmailService.sendUserActivationEmail({
+        to: email,
+        username: `${user.firstName} ${user.lastName}`,
+        activationToken,
+        activationUrl,
+      });
+
+      res.json({
+        message: "If an account exists with this email, an activation email will be sent.",
+        emailSent,
+      });
+
+    } catch (error) {
+      console.error("Resend activation error:", error);
       res.status(500).json({ message: "Server error" });
     }
   });

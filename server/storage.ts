@@ -1,7 +1,7 @@
-import { type Employee, type InsertEmployee, type Customer, type InsertCustomer, type Service, type InsertService, type Invoice, type InsertInvoice, type InvoiceItem, type InsertInvoiceItem, type PaymentMethod, type InsertPaymentMethod, type CompanySettings, type InsertCompanySettings, type MessageTemplate, type InsertMessageTemplate, type Counter, type InsertCounter, type WhatsappConfig, type InsertWhatsappConfig, type CashClosure, type InsertCashClosure, type CashClosurePayment, type InsertCashClosurePayment, type AirtableConfig, type InsertAirtableConfig, type AirtableSyncQueue, type InsertAirtableSyncQueue, type OrderTimestamp, type InsertOrderTimestamp, type DeliveryMetrics, type InsertDeliveryMetrics, employees, customers, services, invoices, invoiceItems, paymentMethods, companySettings, messageTemplates, counters, whatsappConfig, cashClosures, cashClosurePayments, airtableConfig, airtableSyncQueue, orderTimestamps, deliveryMetrics } from "@shared/schema";
+import { type Employee, type InsertEmployee, type Customer, type InsertCustomer, type Service, type InsertService, type Invoice, type InsertInvoice, type InvoiceItem, type InsertInvoiceItem, type PaymentMethod, type InsertPaymentMethod, type CompanySettings, type InsertCompanySettings, type MessageTemplate, type InsertMessageTemplate, type Counter, type InsertCounter, type WhatsappConfig, type InsertWhatsappConfig, type CashClosure, type InsertCashClosure, type CashClosurePayment, type InsertCashClosurePayment, type AirtableConfig, type InsertAirtableConfig, type AirtableSyncQueue, type InsertAirtableSyncQueue, type OrderTimestamp, type InsertOrderTimestamp, type DeliveryMetrics, type InsertDeliveryMetrics, type User, type InsertUser, employees, customers, services, invoices, invoiceItems, paymentMethods, companySettings, messageTemplates, counters, whatsappConfig, cashClosures, cashClosurePayments, airtableConfig, airtableSyncQueue, orderTimestamps, deliveryMetrics, users } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
-import { eq, desc, sql } from "drizzle-orm";
+import { eq, desc, sql, and } from "drizzle-orm";
 import bcrypt from "bcrypt";
 
 export interface IStorage {
@@ -12,7 +12,14 @@ export interface IStorage {
   createEmployee(employee: InsertEmployee): Promise<Employee>;
   updateEmployee(id: string, updates: Partial<Employee>): Promise<Employee | undefined>;
   deleteEmployee(id: string): Promise<void>;
-  
+
+  // Users
+  getUser(id: string): Promise<User | undefined>;
+  getUserByEmail(email: string): Promise<User | undefined>;
+  getUserByEmailAndToken(email: string, token: string): Promise<User | undefined>;
+  createUser(user: InsertUser): Promise<User>;
+  updateUser(id: string, updates: Partial<User>): Promise<User | undefined>;
+
   // Customers
   getCustomer(id: string): Promise<Customer | undefined>;
   getCustomers(): Promise<Customer[]>;
@@ -1167,6 +1174,36 @@ export class DatabaseStorage implements IStorage {
 
   async deleteEmployee(id: string): Promise<void> {
     await db.delete(employees).where(eq(employees.id, id));
+  }
+
+  // Users
+  async getUser(id: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user;
+  }
+
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.email, email));
+    return user;
+  }
+
+  async getUserByEmailAndToken(email: string, token: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users)
+      .where(and(eq(users.email, email), eq(users.emailVerificationToken, token)));
+    return user;
+  }
+
+  async createUser(user: InsertUser): Promise<User> {
+    const [newUser] = await db.insert(users).values(user).returning();
+    return newUser;
+  }
+
+  async updateUser(id: string, updates: Partial<User>): Promise<User | undefined> {
+    const [updated] = await db.update(users)
+      .set(updates)
+      .where(eq(users.id, id))
+      .returning();
+    return updated;
   }
 
   // Customers
