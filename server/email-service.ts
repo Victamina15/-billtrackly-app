@@ -1,6 +1,7 @@
 import { Resend } from 'resend';
+import { config } from './config';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+const resend = new Resend(config.RESEND_API_KEY);
 
 export interface UserActivationEmailData {
   to: string;
@@ -10,11 +11,60 @@ export interface UserActivationEmailData {
 }
 
 export class EmailService {
-  private static readonly FROM_EMAIL = process.env.FROM_EMAIL || 'onboarding@resend.dev';
+  private static readonly FROM_EMAIL = config.FROM_EMAIL;
+  private static readonly DEV_MODE = config.NODE_ENV !== 'production';
+  private static readonly DEV_EMAIL = 'robinsonsilverio1844@gmail.com'; // Owner's email for testing
+
+  static isConfigured(): boolean {
+    const hasApiKey = !!config.RESEND_API_KEY;
+    const hasFromEmail = !!this.FROM_EMAIL;
+
+    if (!hasApiKey) {
+      console.error('❌ Email service not configured: RESEND_API_KEY is missing');
+    }
+    if (!hasFromEmail) {
+      console.error('❌ Email service not configured: FROM_EMAIL is missing');
+    }
+
+    return hasApiKey && hasFromEmail;
+  }
+
+  static async testConnection(): Promise<boolean> {
+    if (!this.isConfigured()) {
+      return false;
+    }
+
+    try {
+      console.log('🧪 Testing email service connection...');
+      const testResult = await this.sendUserActivationEmail({
+        to: this.DEV_EMAIL,
+        username: 'Test User',
+        activationToken: 'test-token',
+        activationUrl: 'https://example.com/activate?token=test-token',
+      });
+
+      if (testResult) {
+        console.log('✅ Email service test successful');
+      } else {
+        console.log('❌ Email service test failed');
+      }
+
+      return testResult;
+    } catch (error) {
+      console.error('💥 Email service test error:', error);
+      return false;
+    }
+  }
 
   static async sendUserActivationEmail(data: UserActivationEmailData): Promise<boolean> {
     try {
       const { to, username, activationToken, activationUrl } = data;
+
+      // In development mode, send to owner's email but include original recipient info
+      const actualTo = this.DEV_MODE ? this.DEV_EMAIL : to;
+      const actualSubject = this.DEV_MODE
+        ? `[DEV MODE - for ${to}] Activate Your BillTracky Account`
+        : 'Activate Your BillTracky Account';
 
       const htmlContent = `
         <!DOCTYPE html>
@@ -45,6 +95,9 @@ export class EmailService {
               <h1>Welcome to BillTracky!</h1>
             </div>
             <div class="content">
+              ${this.DEV_MODE ? `<div style="background: #fff3cd; border: 1px solid #ffeaa7; padding: 10px; margin-bottom: 20px; border-radius: 4px;">
+                <strong>🚧 Development Mode:</strong> This email was originally intended for <strong>${to}</strong>
+              </div>` : ''}
               <h2>Hello ${username},</h2>
               <p>Thank you for signing up for BillTracky. To complete your registration and activate your account, please click the button below:</p>
 
@@ -88,27 +141,63 @@ export class EmailService {
 
       const { data: result, error } = await resend.emails.send({
         from: this.FROM_EMAIL,
-        to,
-        subject: 'Activate Your BillTracky Account',
+        to: actualTo,
+        subject: actualSubject,
         html: htmlContent,
         text: textContent,
       });
 
+      if (this.DEV_MODE && actualTo !== to) {
+        console.log(`[DEV MODE] Email redirected from ${to} to ${actualTo}`);
+      }
+
       if (error) {
-        console.error('Failed to send activation email:', error);
+        console.error('❌ Failed to send activation email:', {
+          error,
+          to: actualTo,
+          originalTo: to,
+          subject: actualSubject,
+          devMode: this.DEV_MODE
+        });
+
+        // Enhanced error logging for common issues
+        if (error.statusCode === 403) {
+          console.error('🚫 Resend API Error: Domain verification required or recipient not allowed');
+        } else if (error.statusCode === 401) {
+          console.error('🔑 Resend API Error: Invalid API key');
+        } else if (error.statusCode === 422) {
+          console.error('📧 Resend API Error: Invalid email format or data');
+        }
+
         return false;
       }
 
-      console.log('Activation email sent successfully:', result?.id);
+      console.log('✅ Activation email sent successfully:', {
+        messageId: result?.id,
+        to: actualTo,
+        originalTo: to,
+        redirected: actualTo !== to,
+        devMode: this.DEV_MODE
+      });
       return true;
     } catch (error) {
-      console.error('Error sending activation email:', error);
+      console.error('💥 Unexpected error sending activation email:', {
+        error: error instanceof Error ? error.message : error,
+        stack: error instanceof Error ? error.stack : undefined,
+        to: data.to,
+        devMode: this.DEV_MODE
+      });
       return false;
     }
   }
 
   static async sendPasswordResetEmail(to: string, username: string, resetUrl: string): Promise<boolean> {
     try {
+      // In development mode, send to owner's email but include original recipient info
+      const actualTo = this.DEV_MODE ? this.DEV_EMAIL : to;
+      const actualSubject = this.DEV_MODE
+        ? `[DEV MODE - for ${to}] Reset Your BillTracky Password`
+        : 'Reset Your BillTracky Password';
       const htmlContent = `
         <!DOCTYPE html>
         <html>
@@ -138,6 +227,9 @@ export class EmailService {
               <h1>Reset Your Password</h1>
             </div>
             <div class="content">
+              ${this.DEV_MODE ? `<div style="background: #fff3cd; border: 1px solid #ffeaa7; padding: 10px; margin-bottom: 20px; border-radius: 4px;">
+                <strong>🚧 Development Mode:</strong> This email was originally intended for <strong>${to}</strong>
+              </div>` : ''}
               <h2>Hello ${username},</h2>
               <p>We received a request to reset your password for your BillTracky account. Click the button below to reset your password:</p>
 
@@ -181,21 +273,52 @@ export class EmailService {
 
       const { data: result, error } = await resend.emails.send({
         from: this.FROM_EMAIL,
-        to,
-        subject: 'Reset Your BillTracky Password',
+        to: actualTo,
+        subject: actualSubject,
         html: htmlContent,
         text: textContent,
       });
 
+      if (this.DEV_MODE && actualTo !== to) {
+        console.log(`[DEV MODE] Password reset email redirected from ${to} to ${actualTo}`);
+      }
+
       if (error) {
-        console.error('Failed to send password reset email:', error);
+        console.error('❌ Failed to send password reset email:', {
+          error,
+          to: actualTo,
+          originalTo: to,
+          subject: actualSubject,
+          devMode: this.DEV_MODE
+        });
+
+        // Enhanced error logging for common issues
+        if (error.statusCode === 403) {
+          console.error('🚫 Resend API Error: Domain verification required or recipient not allowed');
+        } else if (error.statusCode === 401) {
+          console.error('🔑 Resend API Error: Invalid API key');
+        } else if (error.statusCode === 422) {
+          console.error('📧 Resend API Error: Invalid email format or data');
+        }
+
         return false;
       }
 
-      console.log('Password reset email sent successfully:', result?.id);
+      console.log('✅ Password reset email sent successfully:', {
+        messageId: result?.id,
+        to: actualTo,
+        originalTo: to,
+        redirected: actualTo !== to,
+        devMode: this.DEV_MODE
+      });
       return true;
     } catch (error) {
-      console.error('Error sending password reset email:', error);
+      console.error('💥 Unexpected error sending password reset email:', {
+        error: error instanceof Error ? error.message : error,
+        stack: error instanceof Error ? error.stack : undefined,
+        to,
+        devMode: this.DEV_MODE
+      });
       return false;
     }
   }

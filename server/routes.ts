@@ -163,39 +163,63 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // User Registration with Email Activation
   app.post("/api/auth/register", async (req, res) => {
     try {
-      const userData = insertUserSchema.parse(req.body);
+      const { organizationData, ...userData } = req.body;
+
+      // Validate user data
+      const validatedUserData = insertUserSchema.parse(userData);
 
       // Check if user already exists
-      const existingUser = await storage.getUserByEmail(userData.email);
+      const existingUser = await storage.getUserByEmail(validatedUserData.email);
       if (existingUser) {
         return res.status(400).json({ message: "User already exists with this email" });
       }
 
       // Hash password
-      const hashedPassword = await bcrypt.hash(userData.password, 12);
+      const hashedPassword = await bcrypt.hash(validatedUserData.password, 12);
 
       // Generate activation token
       const activationToken = crypto.randomBytes(32).toString('hex');
       const tokenExpiry = new Date();
       tokenExpiry.setHours(tokenExpiry.getHours() + 24); // 24 hours from now
 
-      // Create user with verification token
+      let organizationId = null;
+
+      // If organization data is provided, validate and prepare it
+      if (organizationData) {
+        const validatedOrgData = insertOrganizationSchema.parse(organizationData);
+
+        // Check if subdomain is already taken
+        if (validatedOrgData.subdomain) {
+          const existingOrg = await storage.getOrganizationBySubdomain(validatedOrgData.subdomain);
+          if (existingOrg) {
+            return res.status(400).json({ message: "Subdomain is already taken" });
+          }
+        }
+
+        // Create organization first
+        const organization = await storage.createOrganization(validatedOrgData);
+        organizationId = organization.id;
+      }
+
+      // Create user with verification token and organization link
       const user = await storage.createUser({
-        ...userData,
+        ...validatedUserData,
         password: hashedPassword,
         isEmailVerified: false,
         emailVerificationToken: activationToken,
         emailVerificationExpires: tokenExpiry,
+        organizationId,
+        role: organizationId ? 'owner' : 'owner', // Default to owner role
       });
 
       // Generate activation URL
       const baseUrl = process.env.APP_URL || `${req.protocol}://${req.get('host')}`;
-      const activationUrl = `${baseUrl}/activate?token=${activationToken}&email=${encodeURIComponent(userData.email)}`;
+      const activationUrl = `${baseUrl}/activate?token=${activationToken}&email=${encodeURIComponent(validatedUserData.email)}`;
 
       // Send activation email
       const emailSent = await EmailService.sendUserActivationEmail({
-        to: userData.email,
-        username: `${userData.firstName} ${userData.lastName}`,
+        to: validatedUserData.email,
+        username: `${validatedUserData.firstName} ${validatedUserData.lastName}`,
         activationToken,
         activationUrl,
       });
@@ -208,8 +232,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { password, emailVerificationToken, ...safeUser } = user;
 
       res.status(201).json({
-        message: "User registered successfully. Please check your email to activate your account.",
+        message: organizationId
+          ? "User and organization registered successfully. Please check your email to activate your account."
+          : "User registered successfully. Please check your email to activate your account.",
         user: safeUser,
+        organizationCreated: !!organizationId,
         emailSent,
       });
 
@@ -458,6 +485,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Get profile error:", error);
       res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  // Email Service Test Route (Development only)
+  app.post("/api/test/email", async (req, res) => {
+    try {
+      if (process.env.NODE_ENV === 'production') {
+        return res.status(403).json({ message: "Test routes not available in production" });
+      }
+
+      const { type = 'activation' } = req.body;
+
+      let result = false;
+
+      if (type === 'activation') {
+        result = await EmailService.sendUserActivationEmail({
+          to: 'test@example.com',
+          username: 'Test User',
+          activationToken: 'test-token-123',
+          activationUrl: `${process.env.APP_URL || 'http://localhost:5000'}/activate?token=test-token-123&email=test@example.com`,
+        });
+      } else if (type === 'reset') {
+        result = await EmailService.sendPasswordResetEmail(
+          'test@example.com',
+          'Test User',
+          `${process.env.APP_URL || 'http://localhost:5000'}/reset-password?token=test-reset-123`
+        );
+      } else if (type === 'connection') {
+        result = await EmailService.testConnection();
+      }
+
+      res.json({
+        success: result,
+        type,
+        devMode: process.env.NODE_ENV !== 'production',
+        message: result ? 'Email sent successfully' : 'Email sending failed',
+      });
+
+    } catch (error) {
+      console.error("Email test error:", error);
+      res.status(500).json({ message: "Email test failed", error: error.message });
     }
   });
 
