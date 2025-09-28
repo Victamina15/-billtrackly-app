@@ -162,46 +162,65 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // User Registration with Email Activation
   app.post("/api/auth/register", async (req, res) => {
+    const startTime = Date.now();
+    console.log(`[PERF] Registration started for ${req.body.email}`);
+
     try {
       const { organizationData, ...userData } = req.body;
 
       // Validate user data
+      const parseStart = Date.now();
       const validatedUserData = insertUserSchema.parse(userData);
+      console.log(`[PERF] User data validation: ${Date.now() - parseStart}ms`);
 
       // Check if user already exists
+      const userCheckStart = Date.now();
       const existingUser = await storage.getUserByEmail(validatedUserData.email);
+      console.log(`[PERF] User existence check: ${Date.now() - userCheckStart}ms`);
       if (existingUser) {
         return res.status(400).json({ message: "User already exists with this email" });
       }
 
-      // Hash password
-      const hashedPassword = await bcrypt.hash(validatedUserData.password, 12);
+      // Hash password (reduce rounds in development for speed)
+      const saltRounds = process.env.NODE_ENV === 'production' ? 12 : 8;
+      const hashStart = Date.now();
+      const hashedPassword = await bcrypt.hash(validatedUserData.password, saltRounds);
+      console.log(`[PERF] Password hashed in ${Date.now() - hashStart}ms (${saltRounds} rounds)`);
 
       // Generate activation token
+      const tokenStart = Date.now();
       const activationToken = crypto.randomBytes(32).toString('hex');
       const tokenExpiry = new Date();
       tokenExpiry.setHours(tokenExpiry.getHours() + 24); // 24 hours from now
+      console.log(`[PERF] Token generation: ${Date.now() - tokenStart}ms`);
 
       let organizationId = null;
 
       // If organization data is provided, validate and prepare it
       if (organizationData) {
+        const orgValidateStart = Date.now();
         const validatedOrgData = insertOrganizationSchema.parse(organizationData);
+        console.log(`[PERF] Organization data validation: ${Date.now() - orgValidateStart}ms`);
 
         // Check if subdomain is already taken
         if (validatedOrgData.subdomain) {
+          const subdomainCheckStart = Date.now();
           const existingOrg = await storage.getOrganizationBySubdomain(validatedOrgData.subdomain);
+          console.log(`[PERF] Subdomain check: ${Date.now() - subdomainCheckStart}ms`);
           if (existingOrg) {
             return res.status(400).json({ message: "Subdomain is already taken" });
           }
         }
 
         // Create organization first
+        const orgCreateStart = Date.now();
         const organization = await storage.createOrganization(validatedOrgData);
+        console.log(`[PERF] Organization creation: ${Date.now() - orgCreateStart}ms`);
         organizationId = organization.id;
       }
 
       // Create user with verification token and organization link
+      const userCreateStart = Date.now();
       const user = await storage.createUser({
         ...validatedUserData,
         password: hashedPassword,
@@ -211,25 +230,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         organizationId,
         role: organizationId ? 'owner' : 'owner', // Default to owner role
       });
+      console.log(`[PERF] User creation: ${Date.now() - userCreateStart}ms`);
 
       // Generate activation URL
       const baseUrl = process.env.APP_URL || `${req.protocol}://${req.get('host')}`;
       const activationUrl = `${baseUrl}/activate?token=${activationToken}&email=${encodeURIComponent(validatedUserData.email)}`;
 
-      // Send activation email
-      const emailSent = await EmailService.sendUserActivationEmail({
-        to: validatedUserData.email,
-        username: `${validatedUserData.firstName} ${validatedUserData.lastName}`,
-        activationToken,
-        activationUrl,
-      });
-
-      if (!emailSent) {
-        console.warn("Failed to send activation email, but user was created");
-      }
-
       // Don't return sensitive data
       const { password, emailVerificationToken, ...safeUser } = user;
+
+      // Send response immediately for better UX
+      const responseTime = Date.now() - startTime;
+      console.log(`[PERF] Registration completed in ${responseTime}ms (before email)`);
 
       res.status(201).json({
         message: organizationId
@@ -237,7 +249,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
           : "User registered successfully. Please check your email to activate your account.",
         user: safeUser,
         organizationCreated: !!organizationId,
-        emailSent,
+        emailSent: null, // Will be sent asynchronously
+      });
+
+      // Send activation email asynchronously (don't wait for it)
+      setImmediate(async () => {
+        const emailStart = Date.now();
+        try {
+          const emailSent = await EmailService.sendUserActivationEmail({
+            to: validatedUserData.email,
+            username: `${validatedUserData.firstName} ${validatedUserData.lastName}`,
+            activationToken,
+            activationUrl,
+          });
+          console.log(`[PERF] Email sent in ${Date.now() - emailStart}ms, success: ${emailSent}`);
+
+          if (!emailSent) {
+            console.warn(`Failed to send activation email to ${validatedUserData.email}`);
+          }
+        } catch (emailError) {
+          console.error(`Email sending error for ${validatedUserData.email}:`, emailError);
+        }
       });
 
     } catch (error) {
@@ -1930,7 +1962,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json({
       status: "ok",
       timestamp: new Date().toISOString(),
-      environment: config.NODE_ENV,
+      environment: process.env.NODE_ENV,
       version: "1.0.0"
     });
   });
