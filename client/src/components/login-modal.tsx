@@ -52,25 +52,27 @@ export default function LoginModal({ isOpen, onClose, onRegisterClick, onUserLog
   const onUserSubmit = async (data: LoginForm) => {
     setIsLoading(true);
     try {
-      // Aquí implementaremos la llamada a la API de login de usuarios
-      console.log("Login de usuario:", data);
-      
-      // Simular delay de API
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      // Mock user response
-      const mockUser = {
-        id: "user-1",
-        email: data.email,
-        firstName: "Usuario",
-        lastName: "Demo",
-        organizationId: "org-1",
-        role: "owner"
-      };
-      
-      onUserLogin(mockUser);
+      const response = await fetch("/api/auth/user-login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: data.email,
+          password: data.password
+        }),
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        onUserLogin(result.user);
+      } else {
+        const error = await response.json();
+        userForm.setError("password", { message: error.message || "Credenciales inválidas" });
+      }
     } catch (error) {
       console.error("Error en login:", error);
+      userForm.setError("password", { message: "Error de conexión" });
     } finally {
       setIsLoading(false);
     }

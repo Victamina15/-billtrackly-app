@@ -65,15 +65,46 @@ export default function RegisterModal({ isOpen, onClose, onLoginClick, onSuccess
   const onSubmit = async (data: RegisterForm) => {
     setIsLoading(true);
     try {
-      // Aquí implementaremos la llamada a la API de registro
-      console.log("Datos de registro:", data);
-      
-      // Simular delay de API
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
+      // Prepare user data for API
+      const userData = {
+        firstName: data.firstName,
+        lastName: data.lastName,
+        email: data.email,
+        password: data.password,
+        role: 'owner' as const
+      };
+
+      // Prepare organization data for API
+      const organizationData = {
+        name: data.organizationName,
+        phone: data.organizationPhone,
+        planType: data.selectedPlan
+      };
+
+      const response = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          ...userData,
+          organizationData
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Error en el registro');
+      }
+
+      const result = await response.json();
+      console.log('Registro exitoso:', result);
+
       onSuccess();
     } catch (error) {
       console.error("Error en registro:", error);
+      // TODO: Show error message to user
+      throw error;
     } finally {
       setIsLoading(false);
     }

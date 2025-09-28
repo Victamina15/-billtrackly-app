@@ -1836,6 +1836,95 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Onboarding routes
+  app.post("/api/onboarding/complete", async (req, res) => {
+    try {
+      const { profile, organization, settings } = req.body;
+      const userId = req.body.userId; // Should come from authenticated request in practice
+
+      // Update user profile
+      if (profile && userId) {
+        await storage.updateUser(userId, {
+          phone: profile.phone,
+          timezone: profile.timezone,
+        });
+      }
+
+      // Update organization
+      if (organization && req.body.organizationId) {
+        await storage.updateOrganization(req.body.organizationId, {
+          description: organization.description,
+          address: organization.address,
+          website: organization.website,
+          businessHours: organization.businessHours,
+        });
+      }
+
+      // Store settings (in practice, this would go to a settings table)
+      if (settings) {
+        // For now, we'll store basic settings in the organization table
+        await storage.updateOrganization(req.body.organizationId, {
+          currency: settings.currency,
+          language: settings.language,
+        });
+      }
+
+      res.json({
+        message: "Onboarding completed successfully",
+        success: true
+      });
+    } catch (error) {
+      console.error("Onboarding completion error:", error);
+      res.status(500).json({ message: "Server error during onboarding completion" });
+    }
+  });
+
+  // Check onboarding status
+  app.get("/api/onboarding/status", async (req, res) => {
+    try {
+      const userId = req.query.userId as string;
+
+      if (!userId) {
+        return res.status(400).json({ message: "User ID is required" });
+      }
+
+      const user = await storage.getUserById(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      // Check if user has completed onboarding
+      const hasProfile = !!(user.phone && user.timezone);
+      const organization = await storage.getOrganizationById(user.organizationId);
+      const hasOrganizationInfo = !!(organization?.address || organization?.description);
+
+      const onboardingComplete = hasProfile && hasOrganizationInfo;
+
+      res.json({
+        onboardingComplete,
+        user: {
+          id: user.id,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          email: user.email,
+          phone: user.phone,
+          timezone: user.timezone,
+        },
+        organization: organization ? {
+          id: organization.id,
+          name: organization.name,
+          description: organization.description,
+          address: organization.address,
+          website: organization.website,
+          businessHours: organization.businessHours,
+        } : null
+      });
+    } catch (error) {
+      console.error("Onboarding status error:", error);
+      res.status(500).json({ message: "Server error checking onboarding status" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }
