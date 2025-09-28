@@ -8,7 +8,10 @@
     "build": "vite build && esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
     "start": "node dist/index.js",
     "check": "tsc",
-    "db:push": "drizzle-kit push"
+    "db:push": "drizzle-kit push",
+    "validate:prod": "node scripts/validate-production.js",
+    "deploy": "npm run validate:prod && npm run build",
+    "test:health": "curl -f http://localhost:3000/health || echo 'Health check failed'"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
@@ -45,6 +48,7 @@
     "@stripe/stripe-js": "^7.9.0",
     "@tanstack/react-query": "^5.60.5",
     "@types/bcrypt": "^6.0.0",
+    "@types/cors": "^2.8.19",
     "@types/memoizee": "^0.4.12",
     "@types/pg": "^8.15.5",
     "bcrypt": "^6.0.0",
@@ -53,6 +57,7 @@
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
     "connect-pg-simple": "^10.0.0",
+    "cors": "^2.8.5",
     "date-fns": "^3.6.0",
     "dotenv": "^17.2.2",
     "drizzle-orm": "^0.39.1",

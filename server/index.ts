@@ -1,4 +1,5 @@
 import express, { type Request, Response, NextFunction } from "express";
+import cors from "cors";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { storage } from "./storage";
@@ -7,8 +8,33 @@ import { EmailService } from "./email-service";
 import { config, logConfiguration } from "./config";
 
 const app = express();
-app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
+
+// CORS configuration for production
+const corsOptions = {
+  origin: config.NODE_ENV === 'production'
+    ? ['https://billtracky.com', 'https://www.billtracky.com']
+    : ['http://localhost:3000', 'http://localhost:5000', 'http://localhost:5173'],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept']
+};
+
+app.use(cors(corsOptions));
+
+// Security headers
+app.use((req, res, next) => {
+  if (config.NODE_ENV === 'production') {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('X-XSS-Protection', '1; mode=block');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  }
+  next();
+});
+
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: false, limit: '10mb' }));
 
 app.use((req, res, next) => {
   const start = Date.now();
@@ -99,12 +125,50 @@ app.use((req, res, next) => {
     syncWorker.start();
   });
 
+  // Enhanced error handling for production
+  process.on('uncaughtException', (error) => {
+    log('💥 Uncaught Exception:', error);
+    console.error('Uncaught Exception:', error.stack);
+
+    // In production, exit gracefully
+    if (config.NODE_ENV === 'production') {
+      syncWorker.stop();
+      server.close(() => {
+        process.exit(1);
+      });
+
+      // Force exit after 10 seconds
+      setTimeout(() => {
+        process.exit(1);
+      }, 10000);
+    }
+  });
+
+  process.on('unhandledRejection', (reason, promise) => {
+    log('💥 Unhandled Rejection at:', promise, 'reason:', reason);
+    console.error('Unhandled Rejection:', reason);
+
+    // In production, exit gracefully
+    if (config.NODE_ENV === 'production') {
+      syncWorker.stop();
+      server.close(() => {
+        process.exit(1);
+      });
+
+      // Force exit after 10 seconds
+      setTimeout(() => {
+        process.exit(1);
+      }, 10000);
+    }
+  });
+
   // Graceful shutdown handling
   process.on('SIGTERM', () => {
     log('Received SIGTERM, shutting down gracefully...');
     syncWorker.stop();
     server.close(() => {
       log('Server closed');
+      process.exit(0);
     });
   });
 
@@ -113,6 +177,7 @@ app.use((req, res, next) => {
     syncWorker.stop();
     server.close(() => {
       log('Server closed');
+      process.exit(0);
     });
   });
 

@@ -1925,6 +1925,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Health check endpoints for production monitoring
+  app.get("/health", (req, res) => {
+    res.json({
+      status: "ok",
+      timestamp: new Date().toISOString(),
+      environment: config.NODE_ENV,
+      version: "1.0.0"
+    });
+  });
+
+  app.get("/health/db", async (req, res) => {
+    try {
+      // Test database connection
+      await db.query.users.findFirst();
+      res.json({
+        status: "ok",
+        database: "connected",
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error("Database health check failed:", error);
+      res.status(500).json({
+        status: "error",
+        database: "disconnected",
+        error: error instanceof Error ? error.message : "Unknown error",
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+
+  app.get("/health/email", async (req, res) => {
+    try {
+      const isConfigured = EmailService.isConfigured();
+      res.json({
+        status: isConfigured ? "ok" : "error",
+        email: isConfigured ? "configured" : "not configured",
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error("Email health check failed:", error);
+      res.status(500).json({
+        status: "error",
+        email: "error",
+        error: error instanceof Error ? error.message : "Unknown error",
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }
