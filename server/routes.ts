@@ -187,12 +187,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const hashedPassword = await bcrypt.hash(validatedUserData.password, saltRounds);
       console.log(`[PERF] Password hashed in ${Date.now() - hashStart}ms (${saltRounds} rounds)`);
 
-      // Generate activation token
+      // Skip email verification - allow immediate access
       const tokenStart = Date.now();
-      const activationToken = crypto.randomBytes(32).toString('hex');
-      const tokenExpiry = new Date();
-      tokenExpiry.setHours(tokenExpiry.getHours() + 24); // 24 hours from now
-      console.log(`[PERF] Token generation: ${Date.now() - tokenStart}ms`);
+      console.log(`[PERF] Skipping token generation for immediate access: ${Date.now() - tokenStart}ms`);
 
       let organizationId = null;
 
@@ -219,58 +216,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
         organizationId = organization.id;
       }
 
-      // Create user with verification token and organization link
+      // Create user as verified and active immediately
       const userCreateStart = Date.now();
       const user = await storage.createUser({
         ...validatedUserData,
         password: hashedPassword,
-        isEmailVerified: false,
-        emailVerificationToken: activationToken,
-        emailVerificationExpires: tokenExpiry,
+        isEmailVerified: true, // Set as verified immediately
+        isActive: true, // Set as active immediately
+        emailVerificationToken: null, // No verification token needed
+        emailVerificationExpires: null, // No expiry needed
         organizationId,
         role: organizationId ? 'owner' : 'owner', // Default to owner role
       });
       console.log(`[PERF] User creation: ${Date.now() - userCreateStart}ms`);
 
-      // Generate activation URL
-      const baseUrl = process.env.APP_URL || `${req.protocol}://${req.get('host')}`;
-      const activationUrl = `${baseUrl}/activate?token=${activationToken}&email=${encodeURIComponent(validatedUserData.email)}`;
-
       // Don't return sensitive data
       const { password, emailVerificationToken, ...safeUser } = user;
 
-      // Send response immediately for better UX
+      // Send response - user can login immediately
       const responseTime = Date.now() - startTime;
-      console.log(`[PERF] Registration completed in ${responseTime}ms (before email)`);
+      console.log(`[PERF] Registration completed in ${responseTime}ms - ready to login`);
 
       res.status(201).json({
         message: organizationId
-          ? "User and organization registered successfully. Please check your email to activate your account."
-          : "User registered successfully. Please check your email to activate your account.",
+          ? "User and organization registered successfully. You can now log in."
+          : "User registered successfully. You can now log in.",
         user: safeUser,
         organizationCreated: !!organizationId,
-        emailSent: null, // Will be sent asynchronously
+        canLoginImmediately: true,
       });
 
-      // Send activation email asynchronously (don't wait for it)
-      setImmediate(async () => {
-        const emailStart = Date.now();
-        try {
-          const emailSent = await EmailService.sendUserActivationEmail({
-            to: validatedUserData.email,
-            username: `${validatedUserData.firstName} ${validatedUserData.lastName}`,
-            activationToken,
-            activationUrl,
-          });
-          console.log(`[PERF] Email sent in ${Date.now() - emailStart}ms, success: ${emailSent}`);
-
-          if (!emailSent) {
-            console.warn(`Failed to send activation email to ${validatedUserData.email}`);
-          }
-        } catch (emailError) {
-          console.error(`Email sending error for ${validatedUserData.email}:`, emailError);
-        }
-      });
+      // Email verification disabled - users can login immediately
 
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -392,11 +368,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: "Invalid credentials" });
       }
 
-      // Check if user is verified and active
-      if (!user.isEmailVerified) {
-        return res.status(401).json({ message: "Please verify your email before logging in" });
-      }
-
+      // Check if user is active (email verification no longer required)
       if (!user.isActive) {
         return res.status(401).json({ message: "Account is deactivated" });
       }
