@@ -14,12 +14,15 @@ A modern, full-stack web application for managing laundry business operations in
 - **Order Tracking**: Full lifecycle tracking from received to delivered
 
 ### 🚀 Advanced Features
+- **Complete Authentication**: User registration, login, and session management
+- **Organization Management**: Multi-tenant architecture with organization support
 - **Email Integration**: Automated email notifications via Resend
 - **Airtable Sync**: Optional cloud backup and synchronization
 - **WhatsApp Integration**: Customer communication capabilities
 - **Cash Management**: Daily closure and financial tracking
 - **Analytics & Reporting**: Business insights and performance metrics
 - **Multi-device Support**: Responsive design for desktop and mobile
+- **Serverless API**: Production-ready Vercel serverless functions
 
 ## 🛠️ Tech Stack
 
