@@ -56,7 +56,7 @@ export class EmailService {
       }
 
       // If it's a domain verification error and we're in development, try fallback
-      if (error.statusCode === 403 && this.DEV_MODE && preferredFrom !== this.FALLBACK_FROM_EMAIL) {
+      if ((error as any)?.statusCode === 403 && this.DEV_MODE && preferredFrom !== this.FALLBACK_FROM_EMAIL) {
         console.warn(`⚠️ Domain not verified, falling back to ${this.FALLBACK_FROM_EMAIL}`);
 
         const fallbackResult = await resend.emails.send({

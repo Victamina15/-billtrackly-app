@@ -127,7 +127,7 @@ app.use((req, res, next) => {
 
   // Enhanced error handling for production
   process.on('uncaughtException', (error) => {
-    log('💥 Uncaught Exception:', error);
+    log('💥 Uncaught Exception:', error.message);
     console.error('Uncaught Exception:', error.stack);
 
     // In production, exit gracefully
@@ -145,7 +145,7 @@ app.use((req, res, next) => {
   });
 
   process.on('unhandledRejection', (reason, promise) => {
-    log('💥 Unhandled Rejection at:', promise, 'reason:', reason);
+    log('💥 Unhandled Rejection at: Promise, reason:', String(reason));
     console.error('Unhandled Rejection:', reason);
 
     // In production, exit gracefully
@@ -182,7 +182,7 @@ app.use((req, res, next) => {
   });
 
   } catch (error) {
-    log('💥 Failed to start server:', error);
+    log('💥 Failed to start server:', error instanceof Error ? error.message : String(error));
     process.exit(1);
   }
 })();

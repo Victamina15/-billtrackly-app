@@ -6,7 +6,7 @@
  */
 
 import dotenv from 'dotenv';
-import { createConnection } from 'pg';
+import { Client } from 'pg';
 
 // Load environment variables
 dotenv.config();
@@ -103,7 +103,7 @@ async function validateEnvironment() {
   if (process.env.DATABASE_URL) {
     logInfo('Testing database connection...');
     try {
-      const client = new createConnection({
+      const client = new Client({
         connectionString: process.env.DATABASE_URL,
         connectionTimeoutMillis: 5000,
       });

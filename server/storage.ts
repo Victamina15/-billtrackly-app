@@ -161,6 +161,11 @@ export class MemStorage implements IStorage {
   private deliveryMetrics: Map<string, DeliveryMetrics>;
   private invoiceCounter: number;
 
+  // User and Organization storage
+  private users: Map<string, User>;
+  private organizations: Map<string, Organization>;
+  private userSessions: Map<string, UserSession>;
+
   // Helper methods for access code hashing
   private async hashAccessCode(accessCode: string): Promise<string> {
     const saltRounds = 12;
@@ -193,6 +198,11 @@ export class MemStorage implements IStorage {
     this.orderTimestamps = new Map();
     this.deliveryMetrics = new Map();
     this.invoiceCounter = 10;
+
+    // Initialize user and organization storage
+    this.users = new Map();
+    this.organizations = new Map();
+    this.userSessions = new Map();
     
     // Initialize data asynchronously
     this.seedData().catch(console.error);
@@ -456,6 +466,138 @@ export class MemStorage implements IStorage {
 
   async deleteEmployee(id: string): Promise<void> {
     this.employees.delete(id);
+  }
+
+  // User methods
+  async getUser(id: string): Promise<User | undefined> {
+    return this.users.get(id);
+  }
+
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    return Array.from(this.users.values()).find(user => user.email === email);
+  }
+
+  async getUserByEmailAndToken(email: string, token: string): Promise<User | undefined> {
+    return Array.from(this.users.values()).find(user =>
+      user.email === email &&
+      user.emailVerificationToken === token &&
+      user.emailVerificationExpires &&
+      user.emailVerificationExpires > new Date()
+    );
+  }
+
+  async createUser(user: InsertUser): Promise<User> {
+    const id = randomUUID();
+    const newUser: User = {
+      ...user,
+      id,
+      role: user.role || null,
+      organizationId: user.organizationId || null,
+      isActive: user.isActive ?? true,
+      isEmailVerified: user.isEmailVerified ?? false,
+      emailVerificationToken: user.emailVerificationToken || null,
+      emailVerificationExpires: user.emailVerificationExpires || null,
+      passwordResetToken: user.passwordResetToken || null,
+      passwordResetExpires: user.passwordResetExpires || null,
+      lastLoginAt: user.lastLoginAt || null,
+      avatar: user.avatar || null,
+      preferences: user.preferences || null,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+    this.users.set(id, newUser);
+    return newUser;
+  }
+
+  async updateUser(id: string, updates: Partial<User>): Promise<User | undefined> {
+    const user = this.users.get(id);
+    if (!user) return undefined;
+
+    const updated = { ...user, ...updates, updatedAt: new Date() };
+    this.users.set(id, updated);
+    return updated;
+  }
+
+  // Organization methods
+  async getOrganization(id: string): Promise<Organization | undefined> {
+    return this.organizations.get(id);
+  }
+
+  async getOrganizationBySubdomain(subdomain: string): Promise<Organization | undefined> {
+    return Array.from(this.organizations.values()).find(org => org.subdomain === subdomain);
+  }
+
+  async createOrganization(org: InsertOrganization): Promise<Organization> {
+    const id = randomUUID();
+    const newOrg: Organization = {
+      ...org,
+      id,
+      subdomain: org.subdomain || null,
+      email: org.email || null,
+      phone: org.phone || null,
+      address: org.address || null,
+      city: org.city || null,
+      country: org.country || "Dominican Republic",
+      logo: org.logo || null,
+      planId: org.planId || null,
+      subscriptionStatus: org.subscriptionStatus || "active",
+      subscriptionStartDate: org.subscriptionStartDate || new Date(),
+      subscriptionEndDate: org.subscriptionEndDate || null,
+      trialStartDate: org.trialStartDate || null,
+      trialEndDate: org.trialEndDate || null,
+      stripeCustomerId: org.stripeCustomerId || null,
+      stripeSubscriptionId: org.stripeSubscriptionId || null,
+      isTrialActive: org.isTrialActive ?? true,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+    this.organizations.set(id, newOrg);
+    return newOrg;
+  }
+
+  async updateOrganization(id: string, updates: Partial<Organization>): Promise<Organization | undefined> {
+    const org = this.organizations.get(id);
+    if (!org) return undefined;
+
+    const updated = { ...org, ...updates, updatedAt: new Date() };
+    this.organizations.set(id, updated);
+    return updated;
+  }
+
+  // User Session methods
+  async createUserSession(session: InsertUserSession): Promise<UserSession> {
+    const id = randomUUID();
+    const newSession: UserSession = {
+      ...session,
+      id,
+      createdAt: new Date()
+    };
+    this.userSessions.set(id, newSession);
+    return newSession;
+  }
+
+  async getUserSession(token: string): Promise<UserSession | undefined> {
+    return Array.from(this.userSessions.values()).find(session =>
+      session.token === token && session.expiresAt > new Date()
+    );
+  }
+
+  async deleteUserSession(token: string): Promise<void> {
+    const sessions = Array.from(this.userSessions.entries());
+    const sessionToDelete = sessions.find(([_, session]) => session.token === token);
+    if (sessionToDelete) {
+      this.userSessions.delete(sessionToDelete[0]);
+    }
+  }
+
+  async deleteExpiredSessions(): Promise<void> {
+    const now = new Date();
+    const sessions = Array.from(this.userSessions.entries());
+    sessions.forEach(([id, session]) => {
+      if (session.expiresAt <= now) {
+        this.userSessions.delete(id);
+      }
+    });
   }
 
   // Customer methods
@@ -1040,6 +1182,10 @@ export class MemStorage implements IStorage {
       id,
       timestamp: timestamp.timestamp || new Date(),
       createdAt: new Date(),
+      duration: timestamp.duration || null,
+      employeeId: timestamp.employeeId || null,
+      notes: timestamp.notes || null,
+      previousStatus: timestamp.previousStatus || null,
     };
     this.orderTimestamps.set(id, newTimestamp);
     return newTimestamp;
@@ -1056,6 +1202,15 @@ export class MemStorage implements IStorage {
       id,
       createdAt: new Date(),
       updatedAt: new Date(),
+      serviceType: metrics.serviceType || null,
+      estimatedDeliveryTime: metrics.estimatedDeliveryTime || null,
+      actualDeliveryTime: metrics.actualDeliveryTime || null,
+      processingTime: metrics.processingTime || null,
+      totalTime: metrics.totalTime || null,
+      onTimeDelivery: metrics.onTimeDelivery || false,
+      priority: metrics.priority || null,
+      readyToDeliveredTime: metrics.readyToDeliveredTime || null,
+      delayReason: metrics.delayReason || null,
     };
     this.deliveryMetrics.set(id, newMetrics);
     return newMetrics;
