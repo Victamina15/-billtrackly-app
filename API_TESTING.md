@@ -2,7 +2,7 @@
 
 ## 🚀 Complete Authentication System
 
-The `api/index.js` file now contains a fully functional authentication system with the following endpoints:
+The API now uses individual serverless functions for each endpoint, properly structured for Vercel deployment:
 
 ### 📋 Available Endpoints
 
@@ -276,6 +276,12 @@ JWT_SECRET=your_jwt_secret
 ## 🐛 Troubleshooting
 
 ### Common Issues
+
+**404 Errors on API Endpoints**
+- ✅ **FIXED**: API endpoints restructured as individual serverless functions
+- Each endpoint now has its own file (`api/auth/register.js`, etc.)
+- Vercel routing updated to handle individual functions
+- Test endpoints after redeployment
 
 **Database Connection Errors**
 - Verify `DATABASE_URL` is correct
